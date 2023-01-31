@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use osucraft::hitcircle::HitcircleRing;
 use tracing::info;
 use valence::prelude::*;
 
@@ -14,7 +15,7 @@ pub fn main() -> ShutdownResult {
         },
         ServerState {
             player_list: None,
-            blocks: vec![],
+            hitcircle_ring: None,
             default_world: WorldId::NULL,
         },
     )
@@ -26,7 +27,7 @@ struct Game {
 
 struct ServerState {
     player_list: Option<PlayerListId>,
-    blocks: Vec<EntityId>,
+    hitcircle_ring: Option<HitcircleRing>,
     default_world: WorldId,
 }
 
@@ -48,6 +49,35 @@ impl Config for Game {
     type ChunkState = ();
     type PlayerListState = ();
     type InventoryState = ();
+
+    fn update(&self, server: &mut Server<Self>) {
+        self.handle_connection(server);
+
+        let ring = server.state.hitcircle_ring.take();
+        server.state.hitcircle_ring = match ring {
+            None => Some(
+                HitcircleRing::new(
+                    [
+                        SPAWN_POS.x as f64,
+                        SPAWN_POS.y as f64,
+                        SPAWN_POS.z as f64 + 30.0,
+                    ],
+                    20.0,
+                    10.0,
+                    server,
+                    server.state.default_world,
+                )
+                .unwrap(),
+            ),
+            Some(mut ring) => {
+                if !ring.tick(server) {
+                    None
+                } else {
+                    Some(ring)
+                }
+            }
+        };
+    }
 
     async fn server_list_ping(
         &self,
@@ -79,39 +109,7 @@ impl Config for Game {
 
         world.chunks.set_block_state(SPAWN_POS, BlockState::BEDROCK);
 
-        server.state.blocks.extend((0..1).map(|_| {
-            let (id, e) = server.entities.insert(EntityKind::FallingBlock, ());
-            e.set_world(world_id);
-            e.set_position([
-                SPAWN_POS.x as f64 + 0.5,
-                SPAWN_POS.y as f64 + 5.0,
-                SPAWN_POS.z as f64 + 0.5,
-            ]);
-            if let TrackedData::FallingBlock(falling_block) = e.data_mut() {
-                falling_block.set_no_gravity(true);
-            }
-            id
-        }));
-
-        info!("The server is running on: 127.0.0.1");
-    }
-
-    fn update(&self, server: &mut Server<Self>) {
-        self.handle_connection(server);
-        let current_tick = server.current_tick();
-
-        let entity = &mut server.entities[*server.state.blocks.first().unwrap()];
-        let tick = current_tick % 64;
-
-        let speed = 16.0;
-        let (x, z) = match tick / 16 {
-            0 => (speed, 0.0),
-            1 => (0.0, speed),
-            2 => (-speed, 0.0),
-            3 => (0.0, -speed),
-            _ => panic!("unreachable"),
-        };
-        entity.set_velocity([x, 0.0, z]);
+        info!("Server is running on: 127.0.0.1");
     }
 }
 
