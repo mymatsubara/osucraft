@@ -1,191 +1,128 @@
-use std::borrow::Cow;
-use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-use osucraft::hitcircle::HitcircleRing;
-use tracing::info;
+use osucraft::hitcircle::{
+    rotated_item_to_armor_stand_position, update_hitcircle, update_hitcircle_rings, Hitcircle, Ring,
+};
+use valence::client::despawn_disconnected_clients;
+use valence::client::event::default_event_handler;
+use valence::equipment::{Equipment, EquipmentSlot};
 use valence::prelude::*;
+use valence::protocol::entity_meta::EulerAngle;
 
-pub fn main() -> ShutdownResult {
+const SPAWN_POS: DVec3 = DVec3::new(0.0, 64.0, 0.0);
+
+#[derive(Component)]
+struct Test;
+
+pub fn main() {
     tracing_subscriber::fmt().init();
 
-    valence::start_server(
-        Game {
-            player_count: AtomicUsize::new(0),
-        },
-        ServerState {
-            player_list: None,
-            hitcircle_ring: None,
-            default_world: WorldId::NULL,
-        },
-    )
+    App::new()
+        .add_plugin(ServerPlugin::new(()).with_connection_mode(ConnectionMode::Offline))
+        .add_system_to_stage(EventLoop, default_event_handler)
+        .add_system_set(PlayerList::default_system_set())
+        .add_startup_system(setup)
+        .add_system(init_clients)
+        .add_system(despawn_disconnected_clients)
+        .add_system(update_hitcircle_rings)
+        .add_system(update_hitcircle)
+        .add_system(spawn_hitcircle_rings)
+        .add_system(test)
+        .run();
 }
 
-struct Game {
-    player_count: AtomicUsize,
-}
+fn setup(world: &mut World) {
+    let mut instance = world
+        .resource::<Server>()
+        .new_instance(DimensionId::default());
 
-struct ServerState {
-    player_list: Option<PlayerListId>,
-    hitcircle_ring: Option<HitcircleRing>,
-    default_world: WorldId,
-}
+    for z in -10..10 {
+        for x in -10..10 {
+            instance.insert_chunk([x, z], Chunk::default());
+        }
+    }
 
-#[derive(Default)]
-struct ClientState {
-    entity_id: EntityId,
-}
+    let pos = [
+        SPAWN_POS.x as i32,
+        SPAWN_POS.y as i32 - 1,
+        SPAWN_POS.z as i32,
+    ];
+    instance.set_block(pos, Block::new(BlockState::GLASS));
 
-const MAX_PLAYERS: usize = 10;
+    let instance = world.spawn(instance).id();
 
-const SPAWN_POS: BlockPos = BlockPos::new(0, 100, -25);
-
-#[async_trait]
-impl Config for Game {
-    type ServerState = ServerState;
-    type ClientState = ClientState;
-    type EntityState = ();
-    type WorldState = ();
-    type ChunkState = ();
-    type PlayerListState = ();
-    type InventoryState = ();
-
-    fn update(&self, server: &mut Server<Self>) {
-        self.handle_connection(server);
-
-        let ring = server.state.hitcircle_ring.take();
-        server.state.hitcircle_ring = match ring {
-            None => Some(
-                HitcircleRing::new(
-                    [
-                        SPAWN_POS.x as f64,
-                        SPAWN_POS.y as f64,
-                        SPAWN_POS.z as f64 + 30.0,
-                    ],
-                    20.0,
-                    10.0,
-                    server,
-                    server.state.default_world,
-                )
-                .unwrap(),
-            ),
-            Some(mut ring) => {
-                if !ring.tick(server) {
-                    None
-                } else {
-                    Some(ring)
-                }
-            }
+    // Armor stand
+    for i in 0..10 {
+        let i = i as f32;
+        let rotation = EulerAngle {
+            pitch: i * 15.0,
+            yaw: 0.0,
+            roll: i * 15.0,
         };
-    }
-
-    async fn server_list_ping(
-        &self,
-        _server: &SharedServer<Self>,
-        _remote_addr: SocketAddr,
-        _protocol_version: i32,
-    ) -> ServerListPing {
-        ServerListPing::Respond {
-            online_players: self.player_count.load(Ordering::SeqCst) as i32,
-            max_players: MAX_PLAYERS as i32,
-            player_sample: Cow::Borrowed(&[]),
-            description: "Hello Valence!".color(Color::AQUA),
-            favicon_png: None,
-        }
-    }
-
-    fn init(&self, server: &mut Server<Self>) {
-        let (world_id, world) = server.worlds.insert(DimensionId::default(), ());
-        server.state.default_world = world_id;
-
-        server.state.player_list = Some(server.player_lists.insert(()).0);
-
-        let size = 5;
-        for z in -size..size {
-            for x in -size..size {
-                world.chunks.insert([x, z], UnloadedChunk::default(), ());
-            }
+        let mut armor_stand = McEntity::new(EntityKind::ArmorStand, instance);
+        if let TrackedData::ArmorStand(armor_stand_data) = armor_stand.data_mut() {
+            armor_stand_data.set_no_gravity(false);
+            armor_stand_data.set_tracker_head_rotation(rotation)
         }
 
-        world.chunks.set_block_state(SPAWN_POS, BlockState::BEDROCK);
+        armor_stand.set_position(rotated_item_to_armor_stand_position(SPAWN_POS, rotation));
+        let mut equipment = Equipment::new();
+        let item = ItemStack::new(ItemKind::GreenWool, 1, None);
+        equipment.set(item, EquipmentSlot::Helmet);
 
-        info!("Server is running on: 127.0.0.1");
+        world.spawn((armor_stand, equipment, Test));
     }
 }
 
-impl Game {
-    fn handle_connection(&self, server: &mut Server<Self>) {
-        server.clients.retain(|_, client| {
-            if client.created_this_tick() {
-                if self
-                    .player_count
-                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                        (count < MAX_PLAYERS).then_some(count + 1)
-                    })
-                    .is_err()
-                {
-                    client.disconnect("The server is full!".color(Color::RED));
-                    return false;
-                }
+fn init_clients(
+    mut clients: Query<&mut Client, Added<Client>>,
+    instances: Query<Entity, With<Instance>>,
+) {
+    let instance = instances.single();
 
-                match server
-                    .entities
-                    .insert_with_uuid(EntityKind::Player, client.uuid(), ())
-                {
-                    Some((id, entity)) => {
-                        entity.set_world(server.state.default_world);
-                        client.entity_id = id
-                    }
-                    None => {
-                        client.disconnect("Conflicting UUID");
-                        return false;
-                    }
-                }
-
-                client.respawn(server.state.default_world);
-                client.set_flat(true);
-                client.set_game_mode(GameMode::Creative);
-                client.teleport(
-                    [
-                        SPAWN_POS.x as f64 + 0.5,
-                        SPAWN_POS.y as f64 + 1.0,
-                        SPAWN_POS.z as f64 + 0.5,
-                    ],
-                    0.0,
-                    0.0,
-                );
-                client.set_player_list(server.state.player_list.clone());
-
-                if let Some(id) = &server.state.player_list {
-                    server.player_lists[id].insert(
-                        client.uuid(),
-                        client.username(),
-                        client.textures().cloned(),
-                        client.game_mode(),
-                        0,
-                        None,
-                        true,
-                    );
-                }
-            }
-
-            let entity = &mut server.entities[client.entity_id];
-
-            if client.is_disconnected() {
-                self.player_count.fetch_sub(1, Ordering::SeqCst);
-                if let Some(id) = &server.state.player_list {
-                    server.player_lists[id].remove(client.uuid());
-                }
-                entity.set_deleted(true);
-
-                return false;
-            }
-
-            while let Some(event) = client.next_event() {
-                event.handle_default(client, entity);
-            }
-
-            true
-        });
+    for mut client in &mut clients {
+        client.set_position(SPAWN_POS);
+        client.set_instance(instance);
+        client.set_game_mode(GameMode::Creative);
     }
+}
+
+fn spawn_hitcircle_rings(
+    mut commands: Commands,
+    rings: Query<Entity, With<Hitcircle>>,
+    instances: Query<Entity, With<Instance>>,
+) {
+    if rings.get_single().is_err() {
+        let instance = instances.single();
+        let center = SPAWN_POS + DVec3::new(0.0, 0.0, 10.0);
+        let outer_radius = 10.0;
+        let inner_radius = 5.0;
+        let circle_ticks = 40;
+        let approach_ticks = 35;
+        let item = ItemKind::PinkWool;
+        let combo_number = 1;
+
+        let ring = Hitcircle::new(
+            center,
+            outer_radius,
+            inner_radius,
+            circle_ticks,
+            approach_ticks,
+            item,
+            combo_number,
+            instance,
+            &mut commands,
+        )
+        .unwrap();
+        commands.spawn(ring);
+    }
+}
+
+fn test(server: Res<Server>, mut armor_stands: Query<&mut McEntity, With<Test>>) {
+    // let tick = server.current_tick();
+    // let cycle = 4;
+    // let radius = 5.0;
+    // let angle = (tick % cycle) as f64 / cycle as f64 * TAU;
+
+    // for mut armor_stand in &mut armor_stands {
+    //     armor_stand.set_position(SPAWN_POS + DVec3::new(angle.sin(), 0.0, angle.cos()) * radius);
+    // }
 }

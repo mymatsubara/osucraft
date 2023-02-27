@@ -1,104 +1,262 @@
 use anyhow::{bail, Result};
-use tracing::info;
-use valence::prelude::*;
+use valence::{
+    equipment::{Equipment, EquipmentSlot},
+    math::Vec3,
+    prelude::*,
+    protocol::entity_meta::EulerAngle,
+    Despawned,
+};
 
 use std::f64::consts::TAU;
 
-pub struct HitcircleRing {
-    blocks: Vec<EntityId>,
-    velocity: f32,
+#[derive(Component)]
+pub struct Hitcircle {
+    approach_circle: Entity,
+    circle_ring: Entity,
+    center: DVec3,
+    radius: f64,
     ticks: usize,
 }
 
-impl HitcircleRing {
-    pub fn new<C>(
-        center: impl Into<Vec3<f64>>,
-        radius: f64,
-        velocity: f32,
-        server: &mut Server<C>,
-        world: WorldId,
-    ) -> Result<Self>
-    where
-        C: Config<EntityState = ()>,
-    {
-        if radius <= 0.0 {
-            bail!("Hitcircle ring must have a radius greater than 0.0");
-        }
+#[derive(Component)]
+pub struct Ring {
+    armor_stands: Vec<Entity>,
+    speed: f64,
+    ticks: usize,
+}
 
-        if velocity <= 0.0 {
-            bail!("Hitcircle ring must have speed greater than 0.0");
+#[derive(Component)]
+pub struct HitcircleRingPart;
+
+#[derive(Component)]
+pub struct RotatedBlock;
+
+impl Hitcircle {
+    pub fn new(
+        center: impl Into<DVec3>,
+        approach_circle_radius: f64,
+        circle_radius: f64,
+        circle_ticks: usize,
+        approach_circle_ticks: usize,
+        item: ItemKind,
+        combo_number: usize,
+        instance: Entity,
+        commands: &mut Commands,
+    ) -> Result<Self> {
+        let center = center.into();
+        let approach_circle = Ring::with_speed(
+            center,
+            approach_circle_radius,
+            circle_radius,
+            item,
+            approach_circle_ticks,
+            instance,
+            commands,
+        )?;
+        let approach_circle = commands.spawn(approach_circle).id();
+
+        let circle_ring = Ring::without_speed(
+            center,
+            circle_radius,
+            ItemKind::WhiteWool,
+            circle_ticks,
+            instance,
+            commands,
+        )?;
+        let circle_ring = commands.spawn(circle_ring).id();
+
+        Ok(Self {
+            approach_circle,
+            circle_ring,
+            center,
+            radius: circle_radius,
+            ticks: circle_ticks,
+        })
+    }
+}
+
+impl Ring {
+    // `speed` should be given in blocks per tick
+    pub fn with_speed(
+        center: impl Into<DVec3>,
+        outer_radius: f64,
+        inner_radius: f64,
+        item: ItemKind,
+        ticks: usize,
+        instance: Entity,
+        commands: &mut Commands,
+    ) -> Result<Self> {
+        let speed = (outer_radius - inner_radius).abs() / ticks as f64;
+        Self::new(center, outer_radius, speed, item, ticks, instance, commands)
+    }
+
+    pub fn without_speed(
+        center: impl Into<DVec3>,
+        radius: f64,
+        item: ItemKind,
+        ticks: usize,
+        instance: Entity,
+        commands: &mut Commands,
+    ) -> Result<Self> {
+        Self::new(center, radius, 0.0, item, ticks, instance, commands)
+    }
+
+    fn new(
+        center: impl Into<DVec3>,
+        radius: f64,
+        speed: f64,
+        item: ItemKind,
+        ticks: usize,
+        instance: Entity,
+        commands: &mut Commands,
+    ) -> Result<Self> {
+        if radius <= 0.0 {
+            bail!("Ring must have a radius greater than 0.0");
         }
 
         let center = center.into();
 
         // Calculate block positions/yaw/
-        let number_of_blocks = (TAU * radius) as u32 + 1;
+        let number_of_blocks = (1.8 * TAU * radius) as u32;
         let d_angle = TAU / number_of_blocks as f64;
-        let blocks = (0..number_of_blocks)
+        let armor_stands = (0..number_of_blocks)
             .map(|n| {
                 let angle = d_angle * n as f64;
-                let dir = Vec3::new(angle.cos(), angle.sin(), 0.0);
+                let roll = -(angle * 360.0 / TAU) as f32;
+                let dir = DVec3::new(angle.cos(), angle.sin(), 0.0);
                 let pos = center + radius * dir;
 
-                let (id, entity) = server.entities.insert(EntityKind::FallingBlock, ());
-                if let TrackedData::FallingBlock(block) = entity.data_mut() {
-                    block.set_no_gravity(true);
-                }
-
-                entity.set_world(world);
-                entity.set_position(pos);
-                // entity.set_yaw(45.0);
-                // entity.set_pitch();
-
-                id
+                let rotation = EulerAngle {
+                    pitch: 0.0,
+                    yaw: 0.0,
+                    roll,
+                };
+                create_rotated_item(item, rotation, pos, instance)
             })
+            .map(|bundle| commands.spawn(bundle).id())
             .collect();
 
-        let ticks = (radius / velocity as f64) * 15.0;
-
-        let mut ring = Self {
-            blocks,
-            ticks: ticks as usize,
-            velocity,
+        let ring = Self {
+            armor_stands,
+            ticks,
+            speed,
         };
-
-        ring.refresh_velocity(server);
 
         Ok(ring)
     }
 
-    pub fn refresh_velocity<C>(&mut self, server: &mut Server<C>)
-    where
-        C: Config,
-    {
-        let len = self.blocks.len() as f32;
-        let noise = (self.ticks % 2) as f32 * 0.00001 + 1.0;
+    pub fn update_position(
+        &mut self,
+        ring_entities: &mut Query<&mut McEntity, With<HitcircleRingPart>>,
+    ) {
+        if self.speed == 0.0 {
+            return;
+        }
 
-        self.blocks.iter_mut().enumerate().for_each(|(n, block)| {
-            let entity = &mut server.entities[*block];
-            let angle = TAU as f32 / len * n as f32;
-            let dir = Vec3::new(angle.cos(), angle.sin(), 0.0);
+        let len = self.armor_stands.len() as f64;
 
-            entity.set_velocity(-self.velocity * noise * dir);
-        })
+        self.armor_stands
+            .iter()
+            .enumerate()
+            .for_each(|(n, entity)| {
+                if let Ok(mut entity) = ring_entities.get_mut(*entity) {
+                    let angle = TAU / len * n as f64;
+                    let dir = DVec3::new(angle.cos(), angle.sin(), 0.0);
+                    let mov = -self.speed * dir;
+                    let new_pos = entity.position() + mov;
+
+                    entity.set_position(new_pos);
+                }
+            });
     }
 
-    pub fn tick<C>(&mut self, server: &mut Server<C>) -> bool
-    where
-        C: Config,
-    {
+    /// Returns `false` the hitcircle ring should stop moving
+    pub fn tick(
+        &mut self,
+        commands: &mut Commands,
+        ring_entities: &mut Query<&mut McEntity, With<HitcircleRingPart>>,
+    ) -> bool {
         if self.ticks == 0 {
+            for armor_stand in self.armor_stands.iter() {
+                commands.entity(*armor_stand).insert(Despawned);
+            }
+
             return false;
         }
 
         self.ticks -= 1;
-        self.refresh_velocity(server);
+        self.update_position(ring_entities);
 
-        if self.ticks == 0 {
-            for block in self.blocks.iter() {
-                server.entities.delete(*block);
-            }
-        }
         true
     }
+}
+
+pub fn update_hitcircle(mut commands: Commands, mut hitcircles: Query<(Entity, &mut Hitcircle)>) {
+    for (entity, mut hitcircle) in &mut hitcircles {
+        if hitcircle.ticks == 0 {
+            commands.entity(entity).despawn();
+        } else {
+            hitcircle.ticks -= 1;
+        }
+    }
+}
+
+pub fn update_hitcircle_rings(
+    mut commands: Commands,
+    mut rings: Query<(&mut Ring, Entity)>,
+    mut ring_entities: Query<&mut McEntity, With<HitcircleRingPart>>,
+) {
+    for (mut ring, entity) in &mut rings {
+        if !ring.tick(&mut commands, &mut ring_entities) {
+            commands.entity(entity).insert(Despawned);
+        }
+    }
+}
+
+/// Creates an invisible `ArmorStand` entity equiped with the `item` on the head
+fn create_rotated_item(
+    item: ItemKind,
+    rotation: EulerAngle,
+    position: impl Into<DVec3>,
+    instance: Entity,
+) -> (McEntity, Equipment, HitcircleRingPart) {
+    // Equipment
+    let mut equipment = Equipment::new();
+    let item = ItemStack::new(item, 1, None);
+    equipment.set(item, EquipmentSlot::Helmet);
+
+    // Armor stand
+    let mut armor_stand = McEntity::new(EntityKind::ArmorStand, instance);
+    if let TrackedData::ArmorStand(armor_stand) = armor_stand.data_mut() {
+        armor_stand.set_invisible(true);
+        armor_stand.set_no_gravity(true);
+        armor_stand.set_tracker_head_rotation(rotation);
+    }
+
+    let position = rotated_item_to_armor_stand_position(position, rotation);
+    armor_stand.set_position(position);
+
+    (armor_stand, equipment, HitcircleRingPart {})
+}
+
+const ARMOR_STAND_OFFSET: DVec3 = DVec3::new(0.5, -2.2, 0.5);
+
+/// Returns the armor stand position such that the helmet item position is centered in `pos`
+/// NOTE: if `rotation.roll` and `rotation.pitch` are simultaneously not zero, you may expect wrong results
+pub fn rotated_item_to_armor_stand_position(
+    pos: impl Into<DVec3>,
+    rotation: impl Into<EulerAngle>,
+) -> DVec3 {
+    let EulerAngle { roll, pitch, .. } = rotation.into();
+    let (roll, pitch) = (to_radians(roll as f64), to_radians(pitch as f64));
+
+    let roll_offset = DVec3::new(-roll.sin(), 1.0 - roll.cos(), 0.0);
+    let pitch_offset = DVec3::new(0.0, 1.0 - pitch.cos(), -pitch.sin());
+
+    let rotation_offset = (roll_offset + pitch_offset) * 0.25;
+    pos.into() + ARMOR_STAND_OFFSET + rotation_offset
+}
+
+fn to_radians(degrees: f64) -> f64 {
+    degrees * TAU / 360.0
 }
