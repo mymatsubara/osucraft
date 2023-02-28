@@ -1,13 +1,8 @@
-use osucraft::hitcircle::{
-    rotated_item_to_armor_stand_position, update_hitcircle, update_rings, Hitcircle, Ring,
-};
+use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle};
+use osucraft::osu::Osu;
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::default_event_handler;
-use valence::equipment::{Equipment, EquipmentSlot};
 use valence::prelude::*;
-use valence::protocol::entity_meta::EulerAngle;
-
-const SPAWN_POS: DVec3 = DVec3::new(0.0, 64.0, 0.0);
 
 #[derive(Component)]
 struct Test;
@@ -26,6 +21,7 @@ pub fn main() {
         .add_system(update_hitcircle)
         .add_system(spawn_hitcircle_rings)
         .add_system(test)
+        .insert_resource(Osu::new(0.5))
         .run();
 }
 
@@ -34,52 +30,21 @@ fn setup(world: &mut World) {
         .resource::<Server>()
         .new_instance(DimensionId::default());
 
-    for z in -10..10 {
-        for x in -10..10 {
-            instance.insert_chunk([x, z], Chunk::default());
-        }
-    }
+    world.resource::<Osu>().init(&mut instance);
 
-    let pos = [
-        SPAWN_POS.x as i32,
-        SPAWN_POS.y as i32 - 1,
-        SPAWN_POS.z as i32,
-    ];
-    instance.set_block(pos, Block::new(BlockState::GLASS));
-
-    let instance = world.spawn(instance).id();
-
-    // Armor stand
-    for i in 0..10 {
-        let i = i as f32;
-        let rotation = EulerAngle {
-            pitch: i * 15.0,
-            yaw: 0.0,
-            roll: i * 15.0,
-        };
-        let mut armor_stand = McEntity::new(EntityKind::ArmorStand, instance);
-        if let TrackedData::ArmorStand(armor_stand_data) = armor_stand.data_mut() {
-            armor_stand_data.set_no_gravity(false);
-            armor_stand_data.set_tracker_head_rotation(rotation)
-        }
-
-        armor_stand.set_position(rotated_item_to_armor_stand_position(SPAWN_POS, rotation));
-        let mut equipment = Equipment::new();
-        let item = ItemStack::new(ItemKind::GreenWool, 1, None);
-        equipment.set(item, EquipmentSlot::Helmet);
-
-        world.spawn((armor_stand, equipment, Test));
-    }
+    world.spawn(instance);
 }
 
 fn init_clients(
     mut clients: Query<&mut Client, Added<Client>>,
     instances: Query<Entity, With<Instance>>,
+    osu: Res<Osu>,
 ) {
     let instance = instances.single();
+    let spawn_pos = osu.player_spawn_pos();
 
     for mut client in &mut clients {
-        client.set_position(SPAWN_POS);
+        client.set_position(spawn_pos);
         client.set_instance(instance);
         client.set_game_mode(GameMode::Creative);
     }
@@ -89,10 +54,12 @@ fn spawn_hitcircle_rings(
     mut commands: Commands,
     hitcircles: Query<Entity, With<Hitcircle>>,
     mut instances: Query<(Entity, &mut Instance)>,
+    osu: Res<Osu>,
 ) {
     if hitcircles.get_single().is_err() {
+        let spawn_pos = osu.player_spawn_pos();
         let instance = instances.single_mut();
-        let center = SPAWN_POS + DVec3::new(0.0, 0.0, 10.0);
+        let center = DVec3::new(spawn_pos.x, spawn_pos.y, 0.0);
         let outer_radius = 30.0;
         let inner_radius = 10.0;
         let circle_ticks = 25;

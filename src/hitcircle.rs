@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
 use valence::{
     equipment::{Equipment, EquipmentSlot},
-    math::Vec3,
     prelude::*,
     protocol::entity_meta::EulerAngle,
     Despawned,
@@ -95,10 +94,10 @@ impl Hitcircle {
             &Block::new(BlockState::AIR),
         );
 
-        if let Ok(mut ring) = rings.get_mut(self.circle_ring) {
+        if let Ok(ring) = rings.get_mut(self.circle_ring) {
             ring.despawn(commands);
         }
-        if let Ok(mut approach_circle) = rings.get_mut(self.approach_circle) {
+        if let Ok(approach_circle) = rings.get_mut(self.approach_circle) {
             approach_circle.despawn(commands);
         }
 
