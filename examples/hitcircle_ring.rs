@@ -1,5 +1,5 @@
 use osucraft::hitcircle::{
-    rotated_item_to_armor_stand_position, update_hitcircle, update_hitcircle_rings, Hitcircle, Ring,
+    rotated_item_to_armor_stand_position, update_hitcircle, update_rings, Hitcircle, Ring,
 };
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::default_event_handler;
@@ -22,7 +22,7 @@ pub fn main() {
         .add_startup_system(setup)
         .add_system(init_clients)
         .add_system(despawn_disconnected_clients)
-        .add_system(update_hitcircle_rings)
+        .add_system(update_rings)
         .add_system(update_hitcircle)
         .add_system(spawn_hitcircle_rings)
         .add_system(test)
@@ -87,17 +87,18 @@ fn init_clients(
 
 fn spawn_hitcircle_rings(
     mut commands: Commands,
-    rings: Query<Entity, With<Hitcircle>>,
-    instances: Query<Entity, With<Instance>>,
+    hitcircles: Query<Entity, With<Hitcircle>>,
+    mut instances: Query<(Entity, &mut Instance)>,
 ) {
-    if rings.get_single().is_err() {
-        let instance = instances.single();
+    if hitcircles.get_single().is_err() {
+        let instance = instances.single_mut();
         let center = SPAWN_POS + DVec3::new(0.0, 0.0, 10.0);
-        let outer_radius = 10.0;
-        let inner_radius = 5.0;
-        let circle_ticks = 40;
-        let approach_ticks = 35;
-        let item = ItemKind::PinkWool;
+        let outer_radius = 30.0;
+        let inner_radius = 10.0;
+        let circle_ticks = 25;
+        let approach_ticks = 20;
+        let item = ItemKind::PinkConcrete;
+        let filling = Block::new(BlockState::PINK_CONCRETE);
         let combo_number = 1;
 
         let ring = Hitcircle::new(
@@ -107,6 +108,7 @@ fn spawn_hitcircle_rings(
             circle_ticks,
             approach_ticks,
             item,
+            filling,
             combo_number,
             instance,
             &mut commands,

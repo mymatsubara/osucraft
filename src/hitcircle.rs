@@ -13,6 +13,7 @@ use std::f64::consts::TAU;
 pub struct Hitcircle {
     approach_circle: Entity,
     circle_ring: Entity,
+    instance: Entity,
     center: DVec3,
     radius: f64,
     ticks: usize,
@@ -38,9 +39,10 @@ impl Hitcircle {
         circle_radius: f64,
         circle_ticks: usize,
         approach_circle_ticks: usize,
-        item: ItemKind,
+        approach_circle_item: ItemKind,
+        circle_filling_block: Block,
         combo_number: usize,
-        instance: Entity,
+        mut instance: (Entity, Mut<Instance>),
         commands: &mut Commands,
     ) -> Result<Self> {
         let center = center.into();
@@ -48,30 +50,94 @@ impl Hitcircle {
             center,
             approach_circle_radius,
             circle_radius,
-            item,
+            approach_circle_item,
             approach_circle_ticks,
-            instance,
+            instance.0,
             commands,
         )?;
         let approach_circle = commands.spawn(approach_circle).id();
 
+        let mut circle_ring_center = center;
+        circle_ring_center.z = center.z.floor() - 0.25;
+
         let circle_ring = Ring::without_speed(
-            center,
+            circle_ring_center,
             circle_radius,
-            ItemKind::WhiteWool,
+            ItemKind::WhiteConcrete,
             circle_ticks,
-            instance,
+            instance.0,
             commands,
         )?;
         let circle_ring = commands.spawn(circle_ring).id();
 
-        Ok(Self {
+        let hitcircle = Self {
+            instance: instance.0,
             approach_circle,
             circle_ring,
             center,
             radius: circle_radius,
             ticks: circle_ticks,
+        };
+
+        hitcircle.fill(instance.1, &circle_filling_block);
+
+        Ok(hitcircle)
+    }
+
+    fn despawn(
+        &self,
+        commands: &mut Commands,
+        instances: &mut Query<&mut Instance>,
+        rings: &mut Query<&mut Ring>,
+    ) -> Result<()> {
+        self.fill(
+            instances.get_mut(self.instance)?,
+            &Block::new(BlockState::AIR),
+        );
+
+        if let Ok(mut ring) = rings.get_mut(self.circle_ring) {
+            ring.despawn(commands);
+        }
+        if let Ok(mut approach_circle) = rings.get_mut(self.approach_circle) {
+            approach_circle.despawn(commands);
+        }
+
+        Ok(())
+    }
+
+    fn fill(&self, mut instance: Mut<Instance>, block: &Block) {
+        self.circle_block_positions().for_each(|pos| {
+            instance.set_block(pos, block.clone());
+        });
+    }
+
+    fn circle_block_positions(&self) -> impl Iterator<Item = BlockPos> {
+        let (center_x, center_y, center_z) = (
+            self.center.x as i32,
+            self.center.y as i32,
+            self.center.z as i32,
+        );
+        let radius = self.radius as i32;
+
+        (center_x - radius..=center_x + radius).flat_map(move |x| {
+            (center_y - radius..=center_y + radius).filter_map(move |y| {
+                let rel_x = center_x - x;
+                let rel_y = center_y - y;
+
+                (rel_x.pow(2) + rel_y.pow(2) <= radius.pow(2)).then_some(BlockPos {
+                    x,
+                    y: y - 1,
+                    z: center_z,
+                })
+            })
         })
+    }
+
+    fn contains(&self, x: f64, y: f64) -> bool {
+        let rel_x = x - self.center.x;
+        let rel_y = y - self.center.y;
+
+        rel_x.powi(2) + rel_y.powi(2) <= self.radius.powi(2)
     }
 }
 
@@ -86,7 +152,7 @@ impl Ring {
         instance: Entity,
         commands: &mut Commands,
     ) -> Result<Self> {
-        let speed = (outer_radius - inner_radius).abs() / ticks as f64;
+        let speed = (outer_radius - inner_radius).abs() / (ticks - 2).max(1) as f64;
         Self::new(center, outer_radius, speed, item, ticks, instance, commands)
     }
 
@@ -170,6 +236,12 @@ impl Ring {
             });
     }
 
+    fn despawn(&self, commands: &mut Commands) {
+        for armor_stand in self.armor_stands.iter() {
+            commands.entity(*armor_stand).insert(Despawned);
+        }
+    }
+
     /// Returns `false` the hitcircle ring should stop moving
     pub fn tick(
         &mut self,
@@ -177,10 +249,7 @@ impl Ring {
         ring_entities: &mut Query<&mut McEntity, With<HitcircleRingPart>>,
     ) -> bool {
         if self.ticks == 0 {
-            for armor_stand in self.armor_stands.iter() {
-                commands.entity(*armor_stand).insert(Despawned);
-            }
-
+            self.despawn(commands);
             return false;
         }
 
@@ -191,17 +260,25 @@ impl Ring {
     }
 }
 
-pub fn update_hitcircle(mut commands: Commands, mut hitcircles: Query<(Entity, &mut Hitcircle)>) {
+pub fn update_hitcircle(
+    mut commands: Commands,
+    mut hitcircles: Query<(Entity, &mut Hitcircle)>,
+    mut instances: Query<&mut Instance>,
+    mut rings: Query<&mut Ring>,
+) {
     for (entity, mut hitcircle) in &mut hitcircles {
         if hitcircle.ticks == 0 {
-            commands.entity(entity).despawn();
+            hitcircle
+                .despawn(&mut commands, &mut instances, &mut rings)
+                .unwrap();
+            commands.entity(entity).insert(Despawned);
         } else {
             hitcircle.ticks -= 1;
         }
     }
 }
 
-pub fn update_hitcircle_rings(
+pub fn update_rings(
     mut commands: Commands,
     mut rings: Query<(&mut Ring, Entity)>,
     mut ring_entities: Query<&mut McEntity, With<HitcircleRingPart>>,
