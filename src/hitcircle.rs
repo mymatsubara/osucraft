@@ -6,7 +6,9 @@ use valence::{
     Despawned,
 };
 
-use std::f64::consts::TAU;
+use std::{cmp::max, f64::consts::TAU};
+
+use crate::digit::{DigitWriter, TextPosition};
 
 #[derive(Component)]
 pub struct Hitcircle {
@@ -78,7 +80,8 @@ impl Hitcircle {
             ticks: circle_ticks,
         };
 
-        hitcircle.fill(instance.1, &circle_filling_block);
+        hitcircle.fill(&mut instance.1, &circle_filling_block);
+        hitcircle.draw_combo_number(&mut instance.1, combo_number);
 
         Ok(hitcircle)
     }
@@ -90,7 +93,7 @@ impl Hitcircle {
         rings: &mut Query<&mut Ring>,
     ) -> Result<()> {
         self.fill(
-            instances.get_mut(self.instance)?,
+            &mut instances.get_mut(self.instance)?,
             &Block::new(BlockState::AIR),
         );
 
@@ -104,9 +107,23 @@ impl Hitcircle {
         Ok(())
     }
 
-    fn fill(&self, mut instance: Mut<Instance>, block: &Block) {
+    fn fill(&self, instance: &mut Mut<Instance>, block: &Block) {
         self.circle_block_positions().for_each(|pos| {
             instance.set_block(pos, block.clone());
+        });
+    }
+
+    fn draw_combo_number(&self, instance: &mut Mut<Instance>, combo_number: usize) {
+        let origin = BlockPos::at(self.center);
+
+        DigitWriter {
+            scale: max((self.radius / 7.5) as usize, 1),
+            position: TextPosition::Center,
+        }
+        .iter_block_positions(combo_number, origin)
+        .flatten()
+        .for_each(|pos| {
+            instance.set_block(pos, Block::new(BlockState::WHITE_CONCRETE));
         });
     }
 
