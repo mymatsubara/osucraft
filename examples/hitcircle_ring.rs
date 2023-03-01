@@ -20,6 +20,7 @@ pub fn main() {
         .add_system(update_rings)
         .add_system(update_hitcircle)
         .add_system(spawn_hitcircle_rings)
+        .add_system(hitcircle_raycast)
         .add_system(test)
         .insert_resource(Osu::new(0.5))
         .run();
@@ -82,6 +83,15 @@ fn spawn_hitcircle_rings(
         )
         .unwrap();
         commands.spawn(ring);
+    }
+}
+
+fn hitcircle_raycast(hitcircles: Query<&Hitcircle>, clients: Query<&Client>) {
+    for hitcircle in &hitcircles {
+        for client in &clients {
+            let hit = hitcircle.raycast_client(client);
+            dbg!(hit);
+        }
     }
 }
 

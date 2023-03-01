@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use valence::{
     equipment::{Equipment, EquipmentSlot},
+    math::from_yaw_and_pitch,
     prelude::*,
     protocol::entity_meta::EulerAngle,
     Despawned,
@@ -8,7 +9,10 @@ use valence::{
 
 use std::{cmp::max, f64::consts::TAU};
 
-use crate::digit::{DigitWriter, TextPosition};
+use crate::{
+    digit::{DigitWriter, TextPosition},
+    minecraft::PLAYER_EYE_OFFSET,
+};
 
 #[derive(Component)]
 pub struct Hitcircle {
@@ -86,7 +90,32 @@ impl Hitcircle {
         Ok(hitcircle)
     }
 
-    fn despawn(
+    pub fn raycast_client(&self, client: &Client) -> Option<DVec3> {
+        let origin = client.position() + PLAYER_EYE_OFFSET;
+        let direction = from_yaw_and_pitch(client.yaw(), client.pitch());
+        let direction = DVec3::new(direction.x as f64, direction.y as f64, direction.z as f64);
+
+        self.raycast(origin, direction)
+    }
+
+    pub fn raycast(&self, origin: DVec3, direction: DVec3) -> Option<DVec3> {
+        if direction.z == 0.0 {
+            return None;
+        }
+
+        let direction_scale = (self.center.z - origin.z) / direction.z;
+        if direction_scale < 0.0 {
+            // Direction not pointing to hitcircle plane
+            return None;
+        }
+
+        let intersection = origin + direction * direction_scale;
+        let dist = self.center.distance(intersection);
+
+        (dist <= self.radius).then_some(intersection)
+    }
+
+    pub fn despawn(
         &self,
         commands: &mut Commands,
         instances: &mut Query<&mut Instance>,
@@ -147,13 +176,6 @@ impl Hitcircle {
                 })
             })
         })
-    }
-
-    fn contains(&self, x: f64, y: f64) -> bool {
-        let rel_x = x - self.center.x;
-        let rel_y = y - self.center.y;
-
-        rel_x.powi(2) + rel_y.powi(2) <= self.radius.powi(2)
     }
 }
 
