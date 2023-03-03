@@ -1,5 +1,6 @@
-use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle};
-use osucraft::osu::Osu;
+use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle, HitcircleBlocks};
+use osucraft::osu::{ApproachRate, Beatmap, CircleSize, Osu, OverallDifficulty};
+use rand::Rng;
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::default_event_handler;
 use valence::prelude::*;
@@ -56,28 +57,36 @@ fn spawn_hitcircle_rings(
     hitcircles: Query<Entity, With<Hitcircle>>,
     mut instances: Query<(Entity, &mut Instance)>,
     osu: Res<Osu>,
+    server: Res<Server>,
 ) {
     if hitcircles.get_single().is_err() {
+        let tps = server.shared().tps() as usize;
+        let scale = osu.scale();
+        let beatmap = Beatmap {
+            ar: ApproachRate(9.0),
+            od: OverallDifficulty(8.0),
+            cs: CircleSize(4.5),
+        };
+
         let spawn_pos = osu.player_spawn_pos();
         let instance = instances.single_mut();
         let center = DVec3::new(spawn_pos.x, spawn_pos.y, 0.0);
-        let outer_radius = 30.0;
-        let inner_radius = 10.0;
-        let circle_ticks = 25;
-        let approach_ticks = 20;
-        let item = ItemKind::PinkConcrete;
-        let filling = Block::new(BlockState::PINK_CONCRETE);
-        let combo_number = 1;
 
-        let ring = Hitcircle::new(
+        let blocks = HitcircleBlocks {
+            approach_circle: ItemKind::PinkConcrete,
+            circle_ring: ItemKind::WhiteConcrete,
+            filling: Block::new(BlockState::PINK_CONCRETE),
+            combo_number: Block::new(BlockState::WHITE_CONCRETE),
+        };
+        let combo_number = rand::thread_rng().gen_range(0..=9);
+
+        let ring = Hitcircle::from_beatmap(
             center,
-            outer_radius,
-            inner_radius,
-            circle_ticks,
-            approach_ticks,
-            item,
-            filling,
+            &beatmap,
+            scale,
+            blocks,
             combo_number,
+            tps,
             instance,
             &mut commands,
         )

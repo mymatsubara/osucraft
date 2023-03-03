@@ -115,8 +115,8 @@ impl DigitWriter {
         let position_offset: BlockPos = match self.position {
             TextPosition::Right => BlockPos { x: 0, y: 0, z: 0 },
             TextPosition::Center => BlockPos {
-                x: ((digit_size.0 + digit_spacing) * (digits - 1)) / 2 - 1,
-                y: -digit_size.1 / 2 - 1,
+                x: (digit_size.0 * digits + digit_spacing * (digits - 1)) / 2,
+                y: -digit_size.1 / 2 + (1 - digit_size.1 % 2),
                 z: 0,
             },
             TextPosition::Left => BlockPos {
@@ -148,15 +148,16 @@ impl DigitWriter {
     ) -> impl Iterator<Item = BlockPos> {
         let scale = self.scale;
         let digit = digit as usize;
+        let x_mov = -((DIGIT_SIZE.0 * scale) as i32 - 1);
 
         (0..DIGIT_SIZE.1).flat_map(move |y| {
             (0..DIGIT_SIZE.0)
                 .filter(move |&x| has_block(digit, x, y))
                 .flat_map(move |x| {
-                    (0..scale).flat_map(move |x_offset| {
-                        (0..scale).map(move |y_offset| BlockPos {
-                            x: (x * scale + x_offset) as i32 + origin.x,
-                            y: (y * scale + y_offset) as i32 + origin.y,
+                    (0..scale as i32).flat_map(move |x_offset| {
+                        (0..scale as i32).map(move |y_offset| BlockPos {
+                            x: x_mov + (x * scale) as i32 + x_offset + origin.x,
+                            y: -1 + (y * scale) as i32 + y_offset + origin.y,
                             z: origin.z,
                         })
                     })

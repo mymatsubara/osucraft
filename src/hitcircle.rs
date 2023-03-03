@@ -7,11 +7,12 @@ use valence::{
     Despawned,
 };
 
-use std::{cmp::max, f64::consts::TAU};
+use std::{cmp::max, f64::consts::TAU, ops::RangeInclusive, time::Duration};
 
 use crate::{
     digit::{DigitWriter, TextPosition},
-    minecraft::PLAYER_EYE_OFFSET,
+    minecraft::{to_ticks, PLAYER_EYE_OFFSET},
+    osu::{ApproachRate, Beatmap, CircleSize, HitScore, Hitwindow, OverallDifficulty},
 };
 
 #[derive(Component)]
@@ -22,6 +23,25 @@ pub struct Hitcircle {
     center: DVec3,
     radius: f64,
     ticks: usize,
+    hitwindow: HitwindowTicks,
+}
+
+pub struct HitwindowTicks {
+    window_300: u32,
+    window_100: u32,
+    window_50: u32,
+}
+
+pub struct HitcircleRadius {
+    pub circle: f64,
+    pub approach_circle: f64,
+}
+
+pub struct HitcircleBlocks {
+    pub approach_circle: ItemKind,
+    pub circle_ring: ItemKind,
+    pub filling: Block,
+    pub combo_number: Block,
 }
 
 #[derive(Component)]
@@ -40,12 +60,10 @@ pub struct RotatedBlock;
 impl Hitcircle {
     pub fn new(
         center: impl Into<DVec3>,
-        approach_circle_radius: f64,
-        circle_radius: f64,
-        circle_ticks: usize,
-        approach_circle_ticks: usize,
-        approach_circle_item: ItemKind,
-        circle_filling_block: Block,
+        radius: HitcircleRadius,
+        blocks: HitcircleBlocks,
+        hitwindow: HitwindowTicks,
+        preempt_ticks: usize,
         combo_number: usize,
         mut instance: (Entity, Mut<Instance>),
         commands: &mut Commands,
@@ -53,10 +71,10 @@ impl Hitcircle {
         let center = center.into();
         let approach_circle = Ring::with_speed(
             center,
-            approach_circle_radius,
-            circle_radius,
-            approach_circle_item,
-            approach_circle_ticks,
+            radius.approach_circle,
+            radius.circle,
+            blocks.approach_circle,
+            preempt_ticks,
             instance.0,
             commands,
         )?;
@@ -64,11 +82,12 @@ impl Hitcircle {
 
         let mut circle_ring_center = center;
         circle_ring_center.z = center.z.floor() - 0.25;
+        let circle_ticks = preempt_ticks + hitwindow.window_50 as usize;
 
         let circle_ring = Ring::without_speed(
             circle_ring_center,
-            circle_radius,
-            ItemKind::WhiteConcrete,
+            radius.circle,
+            blocks.circle_ring,
             circle_ticks,
             instance.0,
             commands,
@@ -80,14 +99,40 @@ impl Hitcircle {
             approach_circle,
             circle_ring,
             center,
-            radius: circle_radius,
+            radius: radius.circle,
             ticks: circle_ticks,
+            hitwindow,
         };
 
-        hitcircle.fill(&mut instance.1, &circle_filling_block);
-        hitcircle.draw_combo_number(&mut instance.1, combo_number);
+        hitcircle.fill(&mut instance.1, &blocks.filling);
+        hitcircle.draw_combo_number(&mut instance.1, combo_number, blocks.combo_number);
 
         Ok(hitcircle)
+    }
+
+    pub fn from_beatmap(
+        center: impl Into<DVec3>,
+        beatmap: &Beatmap,
+        scale: f64,
+        blocks: HitcircleBlocks,
+        combo_number: usize,
+        tps: usize,
+        instance: (Entity, Mut<Instance>),
+        commands: &mut Commands,
+    ) -> Result<Self> {
+        let radius = HitcircleRadius::from(beatmap.cs, scale);
+        let hitwindow = HitwindowTicks::from(&beatmap.od.into(), tps);
+        let preempt_ticks = beatmap.ar.to_mc_preempt_ticks(tps);
+        Self::new(
+            center,
+            radius,
+            blocks,
+            hitwindow,
+            preempt_ticks,
+            combo_number,
+            instance,
+            commands,
+        )
     }
 
     pub fn raycast_client(&self, client: &Client) -> Option<DVec3> {
@@ -142,17 +187,17 @@ impl Hitcircle {
         });
     }
 
-    fn draw_combo_number(&self, instance: &mut Mut<Instance>, combo_number: usize) {
+    fn draw_combo_number(&self, instance: &mut Mut<Instance>, combo_number: usize, block: Block) {
         let origin = BlockPos::at(self.center);
 
         DigitWriter {
-            scale: max((self.radius / 7.5) as usize, 1),
+            scale: max((self.radius / 5.5) as usize, 1),
             position: TextPosition::Center,
         }
         .iter_block_positions(combo_number, origin)
         .flatten()
         .for_each(|pos| {
-            instance.set_block(pos, Block::new(BlockState::WHITE_CONCRETE));
+            instance.set_block(pos, block.clone());
         });
     }
 
@@ -298,6 +343,44 @@ impl Ring {
     }
 }
 
+impl HitwindowTicks {
+    fn from(hitwindow: &Hitwindow, tps: usize) -> Self {
+        Self {
+            window_300: to_ticks(tps, hitwindow.window_300) as u32,
+            window_100: to_ticks(tps, hitwindow.window_100) as u32,
+            window_50: to_ticks(tps, hitwindow.window_50) as u32,
+        }
+    }
+
+    fn hit_score(&self, ticks_left: u32) -> HitScore {
+        let hit_time = self.window_50;
+        for (window, score) in [
+            (self.window_300, HitScore::Hit300),
+            (self.window_100, HitScore::Hit100),
+            (self.window_50, HitScore::Hit50),
+        ]
+        .into_iter()
+        {
+            if (hit_time - window..=hit_time + window).contains(&ticks_left) {
+                return score;
+            }
+        }
+
+        HitScore::Miss
+    }
+}
+
+/// https://osu.ppy.sh/wiki/en/Beatmap/Circle_size
+impl HitcircleRadius {
+    fn from(cs: CircleSize, scale: f64) -> Self {
+        let circle = ((54.4 - 4.48 * cs.0) * scale).ceil();
+        Self {
+            circle,
+            approach_circle: circle * 3.0,
+        }
+    }
+}
+
 pub fn update_hitcircle(
     mut commands: Commands,
     mut hitcircles: Query<(Entity, &mut Hitcircle)>,
@@ -374,4 +457,18 @@ pub fn rotated_item_to_armor_stand_position(
 
 fn to_radians(degrees: f64) -> f64 {
     degrees * TAU / 360.0
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn hitcircle_radius() {
+        let scale = 1.0;
+
+        let cs = CircleSize(4.2);
+        let radius = HitcircleRadius::from(cs, scale);
+        assert_eq!(radius.circle, 18.0);
+    }
 }
