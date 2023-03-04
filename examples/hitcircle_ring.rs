@@ -1,8 +1,10 @@
-use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle, HitcircleBlocks};
-use osucraft::osu::{ApproachRate, Beatmap, CircleSize, Osu, OverallDifficulty};
+use osucraft::beatmap::{ApproachRate, BeatmapData, CircleSize, OverallDifficulty};
+use osucraft::color::Color;
+use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle};
+use osucraft::osu::Osu;
 use rand::Rng;
 use valence::client::despawn_disconnected_clients;
-use valence::client::event::default_event_handler;
+use valence::client::event::{default_event_handler, SwingArm};
 use valence::prelude::*;
 
 #[derive(Component)]
@@ -62,29 +64,29 @@ fn spawn_hitcircle_rings(
     if hitcircles.get_single().is_err() {
         let tps = server.shared().tps() as usize;
         let scale = osu.scale();
-        let beatmap = Beatmap {
+        let beatmap = BeatmapData {
             ar: ApproachRate(9.0),
             od: OverallDifficulty(8.0),
             cs: CircleSize(4.5),
+            hit_objects: vec![],
         };
 
         let spawn_pos = osu.player_spawn_pos();
         let instance = instances.single_mut();
         let center = DVec3::new(spawn_pos.x, spawn_pos.y, 0.0);
 
-        let blocks = HitcircleBlocks {
-            approach_circle: ItemKind::PinkConcrete,
-            circle_ring: ItemKind::WhiteConcrete,
-            filling: Block::new(BlockState::PINK_CONCRETE),
-            combo_number: Block::new(BlockState::WHITE_CONCRETE),
+        let pink = Color {
+            r: 233,
+            g: 102,
+            b: 161,
         };
         let combo_number = rand::thread_rng().gen_range(0..=9);
 
         let ring = Hitcircle::from_beatmap(
             center,
             &beatmap,
+            pink,
             scale,
-            blocks,
             combo_number,
             tps,
             instance,
@@ -95,11 +97,18 @@ fn spawn_hitcircle_rings(
     }
 }
 
-fn hitcircle_raycast(hitcircles: Query<&Hitcircle>, clients: Query<&Client>) {
+fn hitcircle_raycast(
+    hitcircles: Query<&Hitcircle>,
+    clients: Query<(Entity, &Client)>,
+    mut swing_arm_events: EventReader<SwingArm>,
+) {
+    let swing_arm_events: Vec<_> = swing_arm_events.iter().collect();
     for hitcircle in &hitcircles {
-        for client in &clients {
-            let hit = hitcircle.raycast_client(client);
-            dbg!(hit);
+        for (client_entity, client) in &clients {
+            if swing_arm_events.iter().any(|e| e.client == client_entity) {
+                let score = hitcircle.hit_score(client);
+                dbg!(score);
+            }
         }
     }
 }

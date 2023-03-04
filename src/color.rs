@@ -1,10 +1,13 @@
-use valence::protocol::{BlockState, ItemKind};
+use valence::{
+    prelude::Block,
+    protocol::{BlockState, ItemKind},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Color {
-    r: u8,
-    g: u8,
-    b: u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -27,6 +30,16 @@ impl Color {
             .min_by_key(|block| block.color.dist(self))
             .unwrap()
             .clone()
+    }
+}
+
+impl BlockColor {
+    pub fn block(&self) -> Block {
+        Block::new(self.block)
+    }
+
+    pub fn item(&self) -> ItemKind {
+        self.item
     }
 }
 

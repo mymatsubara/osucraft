@@ -7,12 +7,14 @@ use valence::{
     Despawned,
 };
 
-use std::{cmp::max, f64::consts::TAU, ops::RangeInclusive, time::Duration};
+use std::{cmp::max, f64::consts::TAU};
 
 use crate::{
+    beatmap::{BeatmapData, CircleSize},
+    color::Color,
     digit::{DigitWriter, TextPosition},
     minecraft::{to_ticks, PLAYER_EYE_OFFSET},
-    osu::{ApproachRate, Beatmap, CircleSize, HitScore, Hitwindow, OverallDifficulty},
+    osu::{HitScore, Hitwindow},
 };
 
 #[derive(Component)]
@@ -112,9 +114,9 @@ impl Hitcircle {
 
     pub fn from_beatmap(
         center: impl Into<DVec3>,
-        beatmap: &Beatmap,
+        beatmap: &BeatmapData,
+        color: Color,
         scale: f64,
-        blocks: HitcircleBlocks,
         combo_number: usize,
         tps: usize,
         instance: (Entity, Mut<Instance>),
@@ -123,6 +125,8 @@ impl Hitcircle {
         let radius = HitcircleRadius::from(beatmap.cs, scale);
         let hitwindow = HitwindowTicks::from(&beatmap.od.into(), tps);
         let preempt_ticks = beatmap.ar.to_mc_preempt_ticks(tps);
+        let blocks: HitcircleBlocks = color.into();
+
         Self::new(
             center,
             radius,
@@ -133,6 +137,12 @@ impl Hitcircle {
             instance,
             commands,
         )
+    }
+
+    pub fn hit_score(&self, client: &Client) -> Option<HitScore> {
+        self.raycast_client(client)
+            .is_some()
+            .then_some(self.hitwindow.hit_score(self.ticks as u32))
     }
 
     pub fn raycast_client(&self, client: &Client) -> Option<DVec3> {
@@ -377,6 +387,20 @@ impl HitcircleRadius {
         Self {
             circle,
             approach_circle: circle * 3.0,
+        }
+    }
+}
+
+impl From<Color> for HitcircleBlocks {
+    fn from(color: Color) -> Self {
+        let block_color = color.to_block_color();
+        let (block, item) = (block_color.block(), block_color.item());
+
+        Self {
+            approach_circle: item,
+            circle_ring: ItemKind::WhiteConcrete,
+            filling: block,
+            combo_number: Block::new(BlockState::WHITE_CONCRETE),
         }
     }
 }

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use valence::{instance::ChunkEntry, prelude::*};
 
-use crate::minecraft::to_ticks;
+use crate::beatmap::{Beatmap, BeatmapData, OverallDifficulty};
 
 const DEFAULT_SCREEN_SIZE: (f64, f64) = (640.0, 480.0);
 const DEFAULT_SPAWN_POS: DVec3 = DVec3::new(DEFAULT_SCREEN_SIZE.0 / 2.0, 240.0, -450.0);
@@ -13,21 +13,6 @@ pub struct Osu {
     cur_beatmap: Option<Beatmap>,
 }
 
-pub struct Beatmap {
-    pub od: OverallDifficulty,
-    pub ar: ApproachRate,
-    pub cs: CircleSize,
-}
-
-#[derive(Copy, Clone)]
-pub struct OverallDifficulty(pub f64);
-
-#[derive(Copy, Clone)]
-pub struct ApproachRate(pub f64);
-
-#[derive(Copy, Clone)]
-pub struct CircleSize(pub f64);
-
 #[derive(PartialEq, Eq, Debug)]
 pub struct Hitwindow {
     pub window_300: Duration,
@@ -35,6 +20,7 @@ pub struct Hitwindow {
     pub window_50: Duration,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum HitScore {
     Hit300,
     Hit100,
@@ -108,6 +94,17 @@ impl Osu {
     pub fn scale(&self) -> f64 {
         self.scale
     }
+
+    pub fn play(&mut self, beatmap: BeatmapData) {
+        self.cur_beatmap = Some(Beatmap {
+            data: beatmap,
+            state: Default::default(),
+        })
+    }
+
+    pub fn tick(&mut self) {
+        if let Some(beatmap) = &mut self.cur_beatmap {}
+    }
 }
 
 // https://osu.ppy.sh/wiki/en/Beatmap/Overall_difficulty
@@ -118,101 +115,5 @@ impl From<OverallDifficulty> for Hitwindow {
             window_100: Duration::from_millis((140.0 - 8.0 * od.0) as u64),
             window_50: Duration::from_millis((200.0 - 10.0 * od.0) as u64),
         }
-    }
-}
-
-/// https://osu.ppy.sh/wiki/en/Beatmap/Approach_rate
-impl ApproachRate {
-    /// Since I don't know how to fade-in blocks, I will consider that the preempt duration starts at halfway through the fade-in phase
-    pub fn to_preempt_duration(self) -> Duration {
-        let ar = self.0;
-        let ms = if ar < 5.0 {
-            1200.0 + 600.0 * (5.0 - ar) / 5.0
-        } else if ar == 5.0 {
-            1200.0
-        } else {
-            1200.0 - 750.0 * (ar - 5.0) / 5.0
-        };
-
-        Duration::from_millis(ms as u64)
-    }
-
-    pub fn to_fade_in_duration(self) -> Duration {
-        let ar = self.0;
-        let ms = if ar < 5.0 {
-            800.0 + 400.0 * (5.0 - ar) / 5.0
-        } else if ar == 5.0 {
-            800.0
-        } else {
-            800.0 - 500.0 * (ar - 5.0) / 5.0
-        };
-
-        Duration::from_millis(ms as u64)
-    }
-
-    pub fn to_mc_preempt_ticks(self, tps: usize) -> usize {
-        to_ticks(
-            tps,
-            (self.to_preempt_duration() + self.to_fade_in_duration()) / 2,
-        )
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn od_hitwindow() {
-        let hitwindow: Hitwindow = OverallDifficulty(10.0).into();
-        assert_eq!(
-            hitwindow,
-            Hitwindow {
-                window_300: Duration::from_millis(20),
-                window_100: Duration::from_millis(60),
-                window_50: Duration::from_millis(100)
-            }
-        );
-
-        let hitwindow: Hitwindow = OverallDifficulty(5.0).into();
-        assert_eq!(
-            hitwindow,
-            Hitwindow {
-                window_300: Duration::from_millis(50),
-                window_100: Duration::from_millis(100),
-                window_50: Duration::from_millis(150)
-            }
-        );
-
-        let hitwindow: Hitwindow = OverallDifficulty(1.0).into();
-        assert_eq!(
-            hitwindow,
-            Hitwindow {
-                window_300: Duration::from_millis(74),
-                window_100: Duration::from_millis(132),
-                window_50: Duration::from_millis(190)
-            }
-        );
-    }
-
-    #[test]
-    fn ar_duration() {
-        let ar = ApproachRate(10.0);
-        let preempt = ar.to_preempt_duration();
-        let fade_in = ar.to_fade_in_duration();
-        assert_eq!(preempt, Duration::from_millis(450));
-        assert_eq!(fade_in, Duration::from_millis(300));
-
-        let ar = ApproachRate(5.0);
-        let preempt = ar.to_preempt_duration();
-        let fade_in = ar.to_fade_in_duration();
-        assert_eq!(preempt, Duration::from_millis(1200));
-        assert_eq!(fade_in, Duration::from_millis(800));
-
-        let ar = ApproachRate(1.0);
-        let preempt = ar.to_preempt_duration();
-        let fade_in = ar.to_fade_in_duration();
-        assert_eq!(preempt, Duration::from_millis(1680));
-        assert_eq!(fade_in, Duration::from_millis(1120));
     }
 }
