@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod beatmap;
 pub mod color;
 pub mod digit;
