@@ -1,6 +1,7 @@
 use anyhow::Result;
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{Decoder, OutputStreamHandle, Sink, Source};
 use std::{
+    cmp::max,
     fs::File,
     io::{BufReader, Read, Seek},
     path::Path,
@@ -13,13 +14,14 @@ use std::{
 
 pub struct AudioPlayer {
     sink: Sink,
-    _stream: (OutputStream, OutputStreamHandle),
     execution: Option<DecoderExecution>,
 }
 
 struct CustomDecoder<R: Read + Seek> {
     decoder: Decoder<R>,
-    samples_played: Arc<AtomicU32>,
+    samples_played: u32,
+    shared_update_rate: u32,
+    shared_samples_played: Arc<AtomicU32>,
 }
 
 struct DecoderExecution {
@@ -29,13 +31,11 @@ struct DecoderExecution {
 }
 
 impl AudioPlayer {
-    pub fn new() -> Result<Self> {
-        let _stream = OutputStream::try_default()?;
-        let sink = Sink::try_new(&_stream.1)?;
+    pub fn new(stream_handle: &OutputStreamHandle) -> Result<Self> {
+        let sink = Sink::try_new(stream_handle)?;
 
         Ok(Self {
             sink,
-            _stream,
             execution: None,
         })
     }
@@ -72,6 +72,10 @@ impl AudioPlayer {
         self.sink.stop()
     }
 
+    pub fn is_paused(&self) -> bool {
+        self.sink.is_paused()
+    }
+
     pub fn has_finished(&self) -> bool {
         self.sink.empty()
     }
@@ -88,18 +92,22 @@ impl DecoderExecution {
 
 impl<R: Read + Seek> CustomDecoder<R> {
     fn new(decoder: Decoder<R>) -> Result<(Self, DecoderExecution)> {
-        let samples_played = Arc::new(AtomicU32::new(0));
+        let shared_samples_played = Arc::new(AtomicU32::new(0));
 
         let execution = DecoderExecution {
             sample_rate: decoder.sample_rate(),
-            samples_played: samples_played.clone(),
+            samples_played: shared_samples_played.clone(),
             channels: decoder.channels(),
         };
+
+        let shared_threshold = max(decoder.sample_rate() / 1000, 1);
 
         Ok((
             Self {
                 decoder,
-                samples_played,
+                samples_played: 0,
+                shared_samples_played,
+                shared_update_rate: shared_threshold,
             },
             execution,
         ))
@@ -110,7 +118,12 @@ impl<R: Read + Seek> Iterator for CustomDecoder<R> {
     type Item = i16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.samples_played.fetch_add(1, Ordering::Relaxed);
+        self.samples_played += 1;
+        if self.samples_played % self.shared_update_rate == 0 {
+            self.shared_samples_played
+                .store(self.samples_played, Ordering::Relaxed)
+        }
+
         self.decoder.next()
     }
 }
