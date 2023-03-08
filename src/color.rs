@@ -59,6 +59,29 @@ impl From<[u8; 3]> for Color {
     }
 }
 
+pub const DEFAULT_COMBO_COLORS: [Color; 4] = [
+    Color {
+        r: 254,
+        g: 169,
+        b: 175,
+    },
+    Color {
+        r: 255,
+        g: 255,
+        b: 139,
+    },
+    Color {
+        r: 255,
+        g: 105,
+        b: 105,
+    },
+    Color {
+        r: 126,
+        g: 163,
+        b: 251,
+    },
+];
+
 const MC_PALLETE: [BlockColor; 16] = [
     BlockColor {
         block: BlockState::WHITE_CONCRETE,

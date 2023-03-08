@@ -1,4 +1,6 @@
-use std::time::Duration;
+use anyhow::{anyhow, Result};
+use osu_file_parser::{Decimal, OsuFile};
+use std::{num::ParseFloatError, time::Duration};
 
 use bevy_ecs::prelude::Entity;
 
@@ -18,7 +20,7 @@ pub struct BeatmapData {
 
 #[derive(Clone, Default)]
 pub struct BeatmapState {
-    pub ticks: usize,
+    pub play_time: Duration,
     pub hits300: usize,
     pub hits100: usize,
     pub hits50: usize,
@@ -35,6 +37,41 @@ pub struct ApproachRate(pub f64);
 
 #[derive(Copy, Clone)]
 pub struct CircleSize(pub f64);
+
+impl TryFrom<OsuFile> for Beatmap {
+    type Error = anyhow::Error;
+
+    fn try_from(osu_file: OsuFile) -> std::result::Result<Self, Self::Error> {
+        let difficulty = osu_file.difficulty.clone().unwrap_or_default();
+        let to_f64 =
+            |decimal: Decimal| -> Result<f64, ParseFloatError> { decimal.to_string().parse() };
+
+        Ok(Self {
+            data: BeatmapData {
+                od: OverallDifficulty(to_f64(
+                    difficulty
+                        .overall_difficulty
+                        .ok_or(anyhow!("beatmap does not contain overall difficulty"))?
+                        .into(),
+                )?),
+                cs: CircleSize(to_f64(
+                    difficulty
+                        .circle_size
+                        .ok_or(anyhow!("beatmap does not contain circle size"))?
+                        .into(),
+                )?),
+                ar: ApproachRate(to_f64(
+                    difficulty
+                        .approach_rate
+                        .ok_or(anyhow!("beatmap does not contain approach rate"))?
+                        .into(),
+                )?),
+                hit_objects: HitObject::from(&osu_file)?,
+            },
+            state: Default::default(),
+        })
+    }
+}
 
 /// https://osu.ppy.sh/wiki/en/Beatmap/Approach_rate
 impl ApproachRate {

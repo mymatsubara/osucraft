@@ -1,8 +1,10 @@
+use osucraft::audio::AudioPlayer;
 use osucraft::beatmap::{ApproachRate, BeatmapData, CircleSize, OverallDifficulty};
 use osucraft::color::Color;
 use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle};
 use osucraft::osu::Osu;
 use rand::Rng;
+use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::{default_event_handler, SwingArm};
 use valence::prelude::*;
@@ -12,6 +14,8 @@ struct Test;
 
 pub fn main() {
     tracing_subscriber::fmt().init();
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    let audio_player = AudioPlayer::new(&stream_handle).unwrap();
 
     App::new()
         .add_plugin(ServerPlugin::new(()).with_connection_mode(ConnectionMode::Offline))
@@ -25,7 +29,7 @@ pub fn main() {
         .add_system(spawn_hitcircle_rings)
         .add_system(hitcircle_raycast)
         .add_system(test)
-        .insert_resource(Osu::new(0.5))
+        .insert_resource(Osu::new(0.5, audio_player))
         .run();
 }
 
@@ -113,13 +117,12 @@ fn hitcircle_raycast(
     }
 }
 
-fn test(server: Res<Server>, mut armor_stands: Query<&mut McEntity, With<Test>>) {
-    // let tick = server.current_tick();
-    // let cycle = 4;
-    // let radius = 5.0;
-    // let angle = (tick % cycle) as f64 / cycle as f64 * TAU;
-
-    // for mut armor_stand in &mut armor_stands {
-    //     armor_stand.set_position(SPAWN_POS + DVec3::new(angle.sin(), 0.0, angle.cos()) * radius);
-    // }
+fn test(mut osu: ResMut<Osu>) {
+    if osu.has_finished_music() {
+        println!("Music is playing");
+        osu.play(
+            r"C:\Users\Murilo\AppData\Local\osu!\Songs\1916172 kessoku band - Nani ga Warui\kessoku band - Nani ga Warui (Shirahane Suou) [Hard].osu",
+        )
+        .unwrap();
+    }
 }

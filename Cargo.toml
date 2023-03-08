@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.68"
 bevy_ecs = "0.9.1"
+osu-file-parser = "1.1.0"
 rand = "0.8.5"
 rodio = "0.17.1"
 tracing = "0.1.37"

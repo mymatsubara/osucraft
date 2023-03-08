@@ -1,16 +1,28 @@
-use std::time::Duration;
+use anyhow::{Context, Result};
+use osu_file_parser::{General, OsuFile};
+use std::{
+    ffi::OsString,
+    fs::{read_to_string, File},
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use valence::{instance::ChunkEntry, prelude::*};
 
-use crate::beatmap::{Beatmap, BeatmapData, OverallDifficulty};
+use crate::{
+    audio::AudioPlayer,
+    beatmap::{Beatmap, BeatmapData, OverallDifficulty},
+};
 
 const DEFAULT_SCREEN_SIZE: (f64, f64) = (640.0, 480.0);
 const DEFAULT_SPAWN_POS: DVec3 = DVec3::new(DEFAULT_SCREEN_SIZE.0 / 2.0, 240.0, -450.0);
+const OSU_DEFAULT_AUDIO_FILE: &str = "audio.mp3";
 
 #[derive(Resource)]
 pub struct Osu {
     scale: f64,
     cur_beatmap: Option<Beatmap>,
+    audio_player: AudioPlayer,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -29,10 +41,11 @@ pub enum HitScore {
 }
 
 impl Osu {
-    pub fn new(scale: f64) -> Self {
+    pub fn new(scale: f64, audio_player: AudioPlayer) -> Self {
         Self {
             scale,
             cur_beatmap: None,
+            audio_player,
         }
     }
 
@@ -40,6 +53,30 @@ impl Osu {
         self.init_chunks(instance);
         self.init_screen(instance);
         self.init_player_spawn(instance);
+    }
+
+    pub fn play(&mut self, beatmap_path: impl AsRef<Path>) -> Result<()> {
+        let beatmap_path = beatmap_path.as_ref();
+        let osu_file = read_to_string(beatmap_path)?.parse::<OsuFile>()?;
+
+        let audio_file = osu_file
+            .general
+            .clone()
+            .and_then(|g| g.audio_filename.map(|f| f.into()))
+            .unwrap_or_else(|| PathBuf::from(OSU_DEFAULT_AUDIO_FILE));
+
+        self.cur_beatmap = Some(Beatmap::try_from(osu_file)?);
+
+        let audio_path = beatmap_path
+            .parent()
+            .with_context(|| "beatmap path does not contain parent directory")?
+            .join(audio_file);
+
+        // Start playing music
+        self.audio_player.set_music(audio_path)?;
+        self.audio_player.play();
+
+        Ok(())
     }
 
     fn init_chunks(&self, instance: &mut Instance) {
@@ -95,15 +132,12 @@ impl Osu {
         self.scale
     }
 
-    pub fn play(&mut self, beatmap: BeatmapData) {
-        self.cur_beatmap = Some(Beatmap {
-            data: beatmap,
-            state: Default::default(),
-        })
-    }
-
     pub fn tick(&mut self) {
         if let Some(beatmap) = &mut self.cur_beatmap {}
+    }
+
+    pub fn has_finished_music(&self) -> bool {
+        self.audio_player.has_finished()
     }
 }
 
