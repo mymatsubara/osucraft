@@ -1,10 +1,7 @@
 use anyhow::Result;
-use osu_file_parser::{colours::Colour, Colours, OsuFile};
+use osu_file_parser::{colours::Colour, OsuFile};
 
-use crate::{
-    color::{Color, DEFAULT_COMBO_COLORS},
-    hitcircle::HitcircleBlocks,
-};
+use crate::color::{Color, DEFAULT_COMBO_COLORS};
 
 /// https://osu.ppy.sh/wiki/en/Client/File_formats/Osu_%28file_format%29#hit-objects
 pub struct HitObject {
@@ -83,6 +80,30 @@ impl HitObject {
         }
 
         Ok(result)
+    }
+
+    pub fn x(&self) -> u32 {
+        self.x
+    }
+
+    pub fn y(&self) -> u32 {
+        self.y
+    }
+
+    pub fn time(&self) -> u32 {
+        self.time
+    }
+
+    pub fn combo_number(&self) -> u32 {
+        self.combo_number
+    }
+
+    pub fn color(&self) -> Color {
+        self.color
+    }
+
+    pub fn params(&self) -> &HitObjectParams {
+        &self.params
     }
 }
 

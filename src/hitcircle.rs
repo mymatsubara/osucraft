@@ -66,7 +66,7 @@ impl Hitcircle {
         blocks: HitcircleBlocks,
         hitwindow: HitwindowTicks,
         preempt_ticks: usize,
-        combo_number: usize,
+        combo_number: u32,
         mut instance: (Entity, Mut<Instance>),
         commands: &mut Commands,
     ) -> Result<Self> {
@@ -117,14 +117,14 @@ impl Hitcircle {
         beatmap: &BeatmapData,
         color: Color,
         scale: f64,
-        combo_number: usize,
+        combo_number: u32,
         tps: usize,
         instance: (Entity, Mut<Instance>),
         commands: &mut Commands,
     ) -> Result<Self> {
         let radius = HitcircleRadius::from(beatmap.cs, scale);
         let hitwindow = HitwindowTicks::from(&beatmap.od.into(), tps);
-        let preempt_ticks = beatmap.ar.to_mc_preempt_ticks(tps);
+        let preempt_ticks = beatmap.ar.to_mc_ticks(tps);
         let blocks: HitcircleBlocks = color.into();
 
         Self::new(
@@ -197,14 +197,14 @@ impl Hitcircle {
         });
     }
 
-    fn draw_combo_number(&self, instance: &mut Mut<Instance>, combo_number: usize, block: Block) {
+    fn draw_combo_number(&self, instance: &mut Mut<Instance>, combo_number: u32, block: Block) {
         let origin = BlockPos::at(self.center);
 
         DigitWriter {
             scale: max((self.radius / 5.5) as usize, 1),
             position: TextPosition::Center,
         }
-        .iter_block_positions(combo_number, origin)
+        .iter_block_positions(combo_number as usize, origin)
         .flatten()
         .for_each(|pos| {
             instance.set_block(pos, block.clone());

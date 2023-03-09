@@ -1,26 +1,31 @@
 use anyhow::{Context, Result};
-use osu_file_parser::{General, OsuFile};
+use osu_file_parser::OsuFile;
 use std::{
-    ffi::OsString,
-    fs::{read_to_string, File},
+    fs::read_to_string,
     path::{Path, PathBuf},
     time::Duration,
 };
+use tracing::warn;
 
-use valence::{instance::ChunkEntry, prelude::*};
+use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*, Despawned};
 
 use crate::{
     audio::AudioPlayer,
-    beatmap::{Beatmap, BeatmapData, OverallDifficulty},
+    beatmap::{Beatmap, OverallDifficulty},
+    hitcircle::Hitcircle,
 };
 
 const DEFAULT_SCREEN_SIZE: (f64, f64) = (640.0, 480.0);
 const DEFAULT_SPAWN_POS: DVec3 = DVec3::new(DEFAULT_SCREEN_SIZE.0 / 2.0, 240.0, -450.0);
 const OSU_DEFAULT_AUDIO_FILE: &str = "audio.mp3";
 
+#[derive(Component)]
+pub struct OsuInstance;
+
 #[derive(Resource)]
 pub struct Osu {
     scale: f64,
+    screen_z: f64,
     cur_beatmap: Option<Beatmap>,
     audio_player: AudioPlayer,
 }
@@ -44,6 +49,7 @@ impl Osu {
     pub fn new(scale: f64, audio_player: AudioPlayer) -> Self {
         Self {
             scale,
+            screen_z: 0.0,
             cur_beatmap: None,
             audio_player,
         }
@@ -132,10 +138,6 @@ impl Osu {
         self.scale
     }
 
-    pub fn tick(&mut self) {
-        if let Some(beatmap) = &mut self.cur_beatmap {}
-    }
-
     pub fn has_finished_music(&self) -> bool {
         self.audio_player.has_finished()
     }
@@ -150,4 +152,127 @@ impl From<OverallDifficulty> for Hitwindow {
             window_50: Duration::from_millis((200.0 - 10.0 * od.0) as u64),
         }
     }
+}
+
+pub fn update_osu(
+    mut osu: ResMut<Osu>,
+    server: Res<Server>,
+    mut commands: Commands,
+    mut osu_instances: Query<(Entity, &mut Instance), With<OsuInstance>>,
+    mut hitcircles: Query<&mut Hitcircle>,
+    clients: Query<&Client>,
+    mut swing_arm_events: EventReader<SwingArm>,
+) {
+    let Ok(osu_instance) = osu_instances.get_single_mut() else {
+        warn!("Server should have one OsuInstance");
+        return;
+    };
+
+    let beatmap = osu.cur_beatmap.take();
+
+    osu.cur_beatmap = match beatmap {
+        // Beatmap has finished
+        Some(beatmap)
+            if beatmap.state.active_hit_objects.is_empty()
+                && beatmap.state.next_hit_object_idx >= beatmap.data.hit_objects.len()
+                && osu.audio_player.has_finished() =>
+        {
+            None
+        }
+        // Beatmap is playing
+        Some(mut beatmap) => {
+            if let Some(next_hitcircle) = beatmap
+                .data
+                .hit_objects
+                .get(beatmap.state.next_hit_object_idx)
+            {
+                // Check we need to spawn the next hitcircle
+                let play_time = osu.audio_player.play_time();
+                beatmap.state.play_time = play_time;
+                let look_ahead = beatmap.data.ar.to_mc_duration();
+                let threshold = play_time + look_ahead;
+
+                if threshold.as_millis() as u32 >= next_hitcircle.time() {
+                    // Spawn hitcircle
+                    let center = DVec3::new(
+                        next_hitcircle.x() as f64,
+                        next_hitcircle.y() as f64,
+                        osu.screen_z,
+                    );
+                    let color = next_hitcircle.color();
+                    let scale = osu.scale;
+                    let combo_number = next_hitcircle.combo_number();
+                    let tps = server.shared().tps() as usize;
+
+                    match Hitcircle::from_beatmap(
+                        center,
+                        &beatmap.data,
+                        color,
+                        scale,
+                        combo_number,
+                        tps,
+                        osu_instance,
+                        &mut commands,
+                    ) {
+                        Ok(hitcircle) => {
+                            let hitcircle_entity = commands.spawn(hitcircle).id();
+
+                            beatmap.state.active_hit_objects.push_back(hitcircle_entity);
+                            beatmap.state.next_hit_object_idx += 1;
+                        }
+                        Err(error) => {
+                            warn!("Error while creating hitcircle: {}", error.to_string());
+                        }
+                    }
+                }
+            }
+
+            // Remove expired hitcircles
+            let expired_hitcircles_count = beatmap
+                .state
+                .active_hit_objects
+                .iter()
+                .take_while(|&&entity| matches!(hitcircles.get(entity), Err(_)))
+                .count();
+            beatmap.state.misses += expired_hitcircles_count;
+            for _ in 0..expired_hitcircles_count {
+                beatmap.state.active_hit_objects.pop_front();
+            }
+
+            // Check hitcircle hit
+            if let Some((entity, hitcircle)) =
+                beatmap
+                    .state
+                    .active_hit_objects
+                    .front()
+                    .and_then(|&entity| {
+                        hitcircles
+                            .get_mut(entity)
+                            .ok()
+                            .map(|hitcircle| (entity, hitcircle))
+                    })
+            {
+                for clicked_client in swing_arm_events
+                    .iter()
+                    .filter_map(|event| clients.get(event.client).ok())
+                {
+                    if let Some(hit) = hitcircle.hit_score(clicked_client) {
+                        match hit {
+                            HitScore::Hit300 => beatmap.state.hits300 += 1,
+                            HitScore::Hit100 => beatmap.state.hits100 += 1,
+                            HitScore::Hit50 => beatmap.state.hits50 += 1,
+                            HitScore::Miss => beatmap.state.misses += 1,
+                        }
+                        commands.entity(entity).insert(Despawned);
+                        beatmap.state.active_hit_objects.pop_front();
+                    }
+                }
+            }
+
+            // Update health
+
+            Some(beatmap)
+        }
+        _ => None,
+    };
 }

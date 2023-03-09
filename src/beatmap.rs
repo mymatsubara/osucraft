@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use osu_file_parser::{Decimal, OsuFile};
-use std::{num::ParseFloatError, time::Duration};
+use std::{collections::VecDeque, num::ParseFloatError, time::Duration};
 
 use bevy_ecs::prelude::Entity;
 
@@ -25,7 +25,7 @@ pub struct BeatmapState {
     pub hits100: usize,
     pub hits50: usize,
     pub misses: usize,
-    pub active_hit_objects: Vec<Entity>,
+    pub active_hit_objects: VecDeque<Entity>,
     pub next_hit_object_idx: usize,
 }
 
@@ -75,7 +75,6 @@ impl TryFrom<OsuFile> for Beatmap {
 
 /// https://osu.ppy.sh/wiki/en/Beatmap/Approach_rate
 impl ApproachRate {
-    /// Since I don't know how to fade-in blocks, I will consider that the preempt duration starts at halfway through the fade-in phase
     pub fn to_preempt_duration(self) -> Duration {
         let ar = self.0;
         let ms = if ar < 5.0 {
@@ -102,11 +101,13 @@ impl ApproachRate {
         Duration::from_millis(ms as u64)
     }
 
-    pub fn to_mc_preempt_ticks(self, tps: usize) -> usize {
-        to_ticks(
-            tps,
-            (self.to_preempt_duration() + self.to_fade_in_duration()) / 2,
-        )
+    /// Since I don't know how to fade-in blocks, I will consider that the preempt duration starts at halfway through the fade-in phase
+    pub fn to_mc_duration(self) -> Duration {
+        (self.to_preempt_duration() + self.to_fade_in_duration()) / 2
+    }
+
+    pub fn to_mc_ticks(self, tps: usize) -> usize {
+        to_ticks(tps, self.to_mc_duration())
     }
 }
 

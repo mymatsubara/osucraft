@@ -2,7 +2,7 @@ use osucraft::audio::AudioPlayer;
 use osucraft::beatmap::{ApproachRate, BeatmapData, CircleSize, OverallDifficulty};
 use osucraft::color::Color;
 use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle};
-use osucraft::osu::Osu;
+use osucraft::osu::{Osu, OsuInstance};
 use rand::Rng;
 use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
@@ -34,13 +34,12 @@ pub fn main() {
 }
 
 fn setup(world: &mut World) {
-    let mut instance = world
-        .resource::<Server>()
-        .new_instance(DimensionId::default());
+    let server = world.resource::<Server>();
+    let mut instance = server.new_instance(DimensionId::default());
 
     world.resource::<Osu>().init(&mut instance);
 
-    world.spawn(instance);
+    world.spawn((instance, OsuInstance));
 }
 
 fn init_clients(
