@@ -6,3 +6,5 @@ pub mod hit_object;
 pub mod hitcircle;
 pub mod minecraft;
 pub mod osu;
+pub mod plugin;
+pub mod ring;

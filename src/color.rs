@@ -82,16 +82,16 @@ pub const DEFAULT_COMBO_COLORS: [Color; 4] = [
     },
 ];
 
-const MC_PALLETE: [BlockColor; 16] = [
-    BlockColor {
-        block: BlockState::WHITE_CONCRETE,
-        item: ItemKind::WhiteConcrete,
-        color: Color {
-            r: 209,
-            g: 215,
-            b: 216,
-        },
-    },
+const MC_PALLETE: [BlockColor; 14] = [
+    // BlockColor {
+    //     block: BlockState::WHITE_CONCRETE,
+    //     item: ItemKind::WhiteConcrete,
+    //     color: Color {
+    //         r: 209,
+    //         g: 215,
+    //         b: 216,
+    //     },
+    // },
     BlockColor {
         block: BlockState::ORANGE_CONCRETE,
         item: ItemKind::OrangeConcrete,
@@ -146,15 +146,15 @@ const MC_PALLETE: [BlockColor; 16] = [
             b: 144,
         },
     },
-    BlockColor {
-        block: BlockState::GRAY_CONCRETE,
-        item: ItemKind::GrayConcrete,
-        color: Color {
-            r: 52,
-            g: 56,
-            b: 60,
-        },
-    },
+    // BlockColor {
+    //     block: BlockState::GRAY_CONCRETE,
+    //     item: ItemKind::GrayConcrete,
+    //     color: Color {
+    //         r: 52,
+    //         g: 56,
+    //         b: 60,
+    //     },
+    // },
     BlockColor {
         block: BlockState::LIGHT_GRAY_CONCRETE,
         item: ItemKind::LightGrayConcrete,

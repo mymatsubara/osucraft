@@ -181,6 +181,18 @@ pub fn update_osu(
         }
         // Beatmap is playing
         Some(mut beatmap) => {
+            // Remove expired hitcircles
+            let expired_hitcircles_count = beatmap
+                .state
+                .active_hit_objects
+                .iter()
+                .take_while(|&&entity| matches!(hitcircles.get(entity), Err(_)))
+                .count();
+            beatmap.state.misses += expired_hitcircles_count;
+            for _ in 0..expired_hitcircles_count {
+                beatmap.state.active_hit_objects.pop_front();
+            }
+
             if let Some(next_hitcircle) = beatmap
                 .data
                 .hit_objects
@@ -195,8 +207,8 @@ pub fn update_osu(
                 if threshold.as_millis() as u32 >= next_hitcircle.time() {
                     // Spawn hitcircle
                     let center = DVec3::new(
-                        next_hitcircle.x() as f64,
-                        next_hitcircle.y() as f64,
+                        next_hitcircle.x() as f64 * osu.scale(),
+                        next_hitcircle.y() as f64 * osu.scale(),
                         osu.screen_z,
                     );
                     let color = next_hitcircle.color();
@@ -225,18 +237,6 @@ pub fn update_osu(
                         }
                     }
                 }
-            }
-
-            // Remove expired hitcircles
-            let expired_hitcircles_count = beatmap
-                .state
-                .active_hit_objects
-                .iter()
-                .take_while(|&&entity| matches!(hitcircles.get(entity), Err(_)))
-                .count();
-            beatmap.state.misses += expired_hitcircles_count;
-            for _ in 0..expired_hitcircles_count {
-                beatmap.state.active_hit_objects.pop_front();
             }
 
             // Check hitcircle hit

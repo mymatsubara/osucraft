@@ -1,8 +1,9 @@
 use osucraft::audio::AudioPlayer;
 use osucraft::beatmap::{ApproachRate, BeatmapData, CircleSize, OverallDifficulty};
 use osucraft::color::Color;
-use osucraft::hitcircle::{update_hitcircle, update_rings, Hitcircle};
+use osucraft::hitcircle::Hitcircle;
 use osucraft::osu::{Osu, OsuInstance};
+use osucraft::plugin::OsuPlugin;
 use rand::Rng;
 use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
@@ -19,14 +20,13 @@ pub fn main() {
 
     App::new()
         .add_plugin(ServerPlugin::new(()).with_connection_mode(ConnectionMode::Offline))
+        .add_plugin(OsuPlugin)
         .add_system_to_stage(EventLoop, default_event_handler)
         .add_system_set(PlayerList::default_system_set())
         .add_startup_system(setup)
         .add_system(init_clients)
         .add_system(despawn_disconnected_clients)
-        .add_system(update_rings)
-        .add_system(update_hitcircle)
-        .add_system(spawn_hitcircle_rings)
+        // .add_system(spawn_hitcircle_rings)
         .add_system(hitcircle_raycast)
         .add_system(test)
         .insert_resource(Osu::new(0.5, audio_player))
