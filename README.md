@@ -2,7 +2,7 @@
 
 An implementation of the rhythm game osu! inside of minecraft using [valence](https://github.com/valence-rs/valence).
 
-### Preview (2023-02-28)
+### Preview (2023-03-13)
 > :warning: Work in progress
 
-https://user-images.githubusercontent.com/49251043/221953789-4e0169ec-8c67-44cd-aa5a-34e3226b5503.mp4
+https://user-images.githubusercontent.com/49251043/224828032-8d0b6458-7229-432b-af19-c476b950a735.mp4
