@@ -3,7 +3,7 @@ use valence::{
     protocol::{BlockState, ItemKind},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Color {
     pub r: u8,
     pub g: u8,

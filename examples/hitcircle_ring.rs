@@ -98,22 +98,6 @@ fn spawn_hitcircle_rings(
     }
 }
 
-fn hitcircle_raycast(
-    hitcircles: Query<&Hitcircle>,
-    clients: Query<(Entity, &Client)>,
-    mut swing_arm_events: EventReader<SwingArm>,
-) {
-    let swing_arm_events: Vec<_> = swing_arm_events.iter().collect();
-    for hitcircle in &hitcircles {
-        for (client_entity, client) in &clients {
-            if swing_arm_events.iter().any(|e| e.client == client_entity) {
-                let score = hitcircle.hit_score(client);
-                dbg!(score);
-            }
-        }
-    }
-}
-
 fn test(mut osu: ResMut<Osu>) {
     if osu.has_finished_music() {
         println!("Music is playing");

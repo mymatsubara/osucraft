@@ -212,15 +212,9 @@ pub fn update_osu(
             beatmap.state.misses += expired_hitcircles_count;
             for _ in 0..expired_hitcircles_count {
                 beatmap.state.active_hit_objects.pop_front();
-                let mut instances = instances_set.p1();
-                redraw_hitcircles(
-                    beatmap.state.active_hit_objects.iter(),
-                    &mut instances,
-                    &hitcircles,
-                )
             }
 
-            if let Some(next_hitcircle) = beatmap
+            if let Some(next_hitobject) = beatmap
                 .data
                 .hit_objects
                 .get(beatmap.state.next_hit_object_idx)
@@ -231,19 +225,24 @@ pub fn update_osu(
                 let look_ahead = beatmap.data.ar.to_mc_duration();
                 let threshold = play_time + look_ahead;
 
-                if threshold.as_millis() as u32 >= next_hitcircle.time() {
+                if threshold.as_millis() as u32 >= next_hitobject.time() {
                     // Spawn hitcircle
                     let screen_size = osu.screen_size();
                     let margin_size = osu.screen_margin();
-                    let center = DVec3::new(
-                        screen_size.0 as f64 - next_hitcircle.x() as f64 * osu.scale(),
-                        next_hitcircle.y() as f64 * osu.scale() + margin_size.1 as f64,
-                        osu.screen_z,
+                    let z_offset = next_hitobject.z(
+                        &beatmap.data.hit_objects[beatmap.state.next_hit_object_idx + 1..],
+                        beatmap.data.cs,
                     );
 
-                    let color = next_hitcircle.color();
+                    let center = DVec3::new(
+                        screen_size.0 as f64 - next_hitobject.x() as f64 * osu.scale(),
+                        next_hitobject.y() as f64 * osu.scale() + margin_size.1 as f64,
+                        osu.screen_z + z_offset as f64,
+                    );
+
+                    let color = next_hitobject.color();
                     let scale = osu.scale;
-                    let combo_number = next_hitcircle.combo_number();
+                    let combo_number = next_hitobject.combo_number();
                     let tps = server.shared().tps() as usize;
 
                     let mut osu_instances = instances_set.p0();
@@ -286,18 +285,11 @@ pub fn update_osu(
                                 HitScore::Hit50 => beatmap.state.hits50 += 1,
                                 HitScore::Miss => beatmap.state.misses += 1,
                             }
-                            dbg!(hit);
 
                             hitcircle
                                 .despawn(&mut commands, &rings, &mut instances)
                                 .unwrap();
                             beatmap.state.active_hit_objects.pop_front();
-
-                            redraw_hitcircles(
-                                beatmap.state.active_hit_objects.iter(),
-                                &mut instances,
-                                &hitcircles,
-                            );
                         }
                     }
                 }
@@ -309,18 +301,4 @@ pub fn update_osu(
         }
         _ => None,
     };
-}
-
-fn redraw_hitcircles<'a>(
-    hitcircles: impl DoubleEndedIterator<Item = &'a Entity>,
-    instances: &mut Query<&mut Instance>,
-    hitcircles_query: &Query<&mut Hitcircle>,
-) {
-    for hitcircle in hitcircles
-        .rev()
-        .filter_map(|entity| hitcircles_query.get(*entity).ok())
-    {
-        let mut instance = instances.get_mut(hitcircle.instance()).unwrap();
-        hitcircle.draw_circle(&mut instance);
-    }
 }

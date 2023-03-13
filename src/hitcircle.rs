@@ -279,7 +279,7 @@ impl HitwindowTicks {
 
 /// https://osu.ppy.sh/wiki/en/Beatmap/Circle_size
 impl HitcircleRadius {
-    fn from(cs: CircleSize, scale: f64) -> Self {
+    pub fn from(cs: CircleSize, scale: f64) -> Self {
         let circle = ((54.4 - 4.48 * cs.0) * scale).ceil();
         Self {
             circle,
@@ -311,6 +311,6 @@ mod test {
 
         let cs = CircleSize(4.2);
         let radius = HitcircleRadius::from(cs, scale);
-        assert_eq!(radius.circle, 18.0);
+        assert_eq!(radius.circle, 36.0);
     }
 }

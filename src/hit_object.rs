@@ -1,8 +1,13 @@
 use anyhow::Result;
 use osu_file_parser::{colours::Colour, OsuFile};
 
-use crate::color::{Color, DEFAULT_COMBO_COLORS};
+use crate::{
+    beatmap::{ApproachRate, CircleSize},
+    color::{Color, DEFAULT_COMBO_COLORS},
+    hitcircle::HitcircleRadius,
+};
 
+#[derive(Default)]
 /// https://osu.ppy.sh/wiki/en/Client/File_formats/Osu_%28file_format%29#hit-objects
 pub struct HitObject {
     /// In osu!pixels
@@ -21,6 +26,12 @@ pub enum HitObjectParams {
     Slider,
     Spinner,
     OsuManiaHold,
+}
+
+impl Default for HitObjectParams {
+    fn default() -> Self {
+        Self::Hitcircle
+    }
 }
 
 impl HitObject {
@@ -82,6 +93,30 @@ impl HitObject {
         Ok(result)
     }
 
+    // Calculate z value such that there is no overlap with other hitcircles
+    //
+    // `remaining`: is the list of the remaining hitobjects in the song ordered in chronological order.
+    pub fn z(&self, remaining: &[HitObject], cs: CircleSize) -> i32 {
+        match remaining.first() {
+            Some(next) => {
+                if self.intersect(next, cs) {
+                    next.z(&remaining[1..], cs) - 1
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        }
+    }
+
+    pub fn intersect(&self, other: &HitObject, cs: CircleSize) -> bool {
+        let radius = HitcircleRadius::from(cs, 1.0).circle;
+        let dist = (self.x.abs_diff(other.x).pow(2) + self.y.abs_diff(other.y).pow(2)) as f64;
+        let dist = dist.sqrt();
+
+        dist < radius * 2.0
+    }
+
     pub fn x(&self) -> u32 {
         self.x
     }
@@ -120,5 +155,47 @@ impl From<osu_file_parser::hitobjects::HitObjectParams> for HitObjectParams {
             }
             _ => panic!("unexpected hitobject from osu file"),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::{beatmap::CircleSize, hitcircle::HitcircleRadius};
+
+    use super::HitObject;
+
+    #[test]
+    fn hitobject_z() {
+        let cs = CircleSize(5.0);
+        let radius = HitcircleRadius::from(cs, 1.0).circle as u32;
+
+        let hitobjects = vec![
+            HitObject {
+                x: 0,
+                y: 0,
+                ..Default::default()
+            },
+            HitObject {
+                x: radius,
+                y: 0,
+                ..Default::default()
+            },
+            HitObject {
+                x: 2 * radius,
+                y: 0,
+                ..Default::default()
+            },
+            HitObject {
+                x: 4 * radius,
+                y: 0,
+                ..Default::default()
+            },
+        ];
+
+        assert_eq!(hitobjects[0].z(&hitobjects[1..], cs), -2);
+        assert_eq!(hitobjects[1].z(&hitobjects[2..], cs), -1);
+        assert_eq!(hitobjects[2].z(&hitobjects[3..], cs), 0);
+        assert_eq!(hitobjects[3].z(&hitobjects[4..], cs), 0);
     }
 }
