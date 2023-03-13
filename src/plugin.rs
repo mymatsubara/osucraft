@@ -1,5 +1,4 @@
-use bevy_ecs::schedule::IntoSystemDescriptor;
-use bevy_ecs::schedule::SystemSet;
+use bevy_ecs::schedule::{IntoSystemDescriptor, SystemSet};
 use valence::bevy_app::Plugin;
 
 use crate::{hitcircle::update_hitcircle, osu::update_osu, ring::update_rings};

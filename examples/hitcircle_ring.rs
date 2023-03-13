@@ -26,10 +26,8 @@ pub fn main() {
         .add_startup_system(setup)
         .add_system(init_clients)
         .add_system(despawn_disconnected_clients)
-        // .add_system(spawn_hitcircle_rings)
-        .add_system(hitcircle_raycast)
         .add_system(test)
-        .insert_resource(Osu::new(0.5, audio_player))
+        .insert_resource(Osu::new(0.4, audio_player))
         .run();
 }
 

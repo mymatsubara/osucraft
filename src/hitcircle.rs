@@ -22,6 +22,8 @@ pub struct Hitcircle {
     radius: f64,
     ticks: usize,
     hitwindow: HitwindowTicks,
+    filling_block: BlockState,
+    combo_number: u32,
 }
 
 pub struct HitwindowTicks {
@@ -39,7 +41,6 @@ pub struct HitcircleBlocks {
     pub approach_circle: ItemKind,
     pub circle_ring: ItemKind,
     pub filling: Block,
-    pub combo_number: Block,
 }
 
 pub fn update_hitcircle(
@@ -71,7 +72,7 @@ impl Hitcircle {
         mut instance: (Entity, Mut<Instance>),
         commands: &mut Commands,
     ) -> Result<Self> {
-        let center = center.into();
+        let center = center.into().floor();
         let approach_circle = Ring::with_speed(
             center,
             radius.approach_circle,
@@ -105,10 +106,11 @@ impl Hitcircle {
             radius: radius.circle,
             ticks: circle_ticks,
             hitwindow,
+            filling_block: blocks.filling.state(),
+            combo_number,
         };
 
-        hitcircle.fill(&mut instance.1, &blocks.filling);
-        hitcircle.draw_combo_number(&mut instance.1, combo_number, blocks.combo_number);
+        hitcircle.draw_circle(&mut instance.1);
 
         Ok(hitcircle)
     }
@@ -174,7 +176,7 @@ impl Hitcircle {
     pub fn despawn(
         &self,
         commands: &mut Commands,
-        rings: &mut Query<&Ring>,
+        rings: &Query<&Ring>,
         instances: &mut Query<&mut Instance>,
     ) -> Result<()> {
         self.fill(
@@ -190,6 +192,19 @@ impl Hitcircle {
         }
 
         Ok(())
+    }
+
+    pub fn draw_circle(&self, instance: &mut Mut<Instance>) {
+        self.fill(instance, &Block::new(self.filling_block));
+        self.draw_combo_number(
+            instance,
+            self.combo_number,
+            Block::new(BlockState::WHITE_CONCRETE),
+        );
+    }
+
+    pub fn instance(&self) -> Entity {
+        self.instance
     }
 
     fn fill(&self, instance: &mut Mut<Instance>, block: &Block) {
@@ -282,7 +297,6 @@ impl From<Color> for HitcircleBlocks {
             approach_circle: item,
             circle_ring: ItemKind::WhiteConcrete,
             filling: block,
-            combo_number: Block::new(BlockState::WHITE_CONCRETE),
         }
     }
 }

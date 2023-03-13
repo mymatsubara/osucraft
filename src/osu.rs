@@ -13,10 +13,16 @@ use crate::{
     audio::AudioPlayer,
     beatmap::{Beatmap, OverallDifficulty},
     hitcircle::Hitcircle,
+    ring::Ring,
 };
 
+const SCREEN_MARGIN_RATIO: f64 = 0.5;
 const DEFAULT_SCREEN_SIZE: (f64, f64) = (640.0, 480.0);
-const DEFAULT_SPAWN_POS: DVec3 = DVec3::new(DEFAULT_SCREEN_SIZE.0 / 2.0, 240.0, -450.0);
+const DEFAULT_SPAWN_POS: DVec3 = DVec3::new(
+    DEFAULT_SCREEN_SIZE.0 / 1.75,
+    DEFAULT_SCREEN_SIZE.1 * (1.0 + 2.0 * SCREEN_MARGIN_RATIO) / 2.25,
+    -450.0,
+);
 const OSU_DEFAULT_AUDIO_FILE: &str = "audio.mp3";
 
 #[derive(Component)]
@@ -86,10 +92,12 @@ impl Osu {
     }
 
     fn init_chunks(&self, instance: &mut Instance) {
-        let (max_x, _) = self.screen_size();
+        let (screen_x, _) = self.screen_size();
+        let (margin_x, _) = self.screen_margin();
+        let max_x = screen_x + margin_x;
         let max_z = self.player_spawn_pos().z as i32;
 
-        for x in -1..=(max_x / 16) + 1 {
+        for x in -1 - (margin_x / 16)..=(max_x / 16) + 1 {
             for z in (max_z / 16) - 1..=1 {
                 if let ChunkEntry::Vacant(chunk) = instance.chunk_entry([x, z]) {
                     chunk.insert(Default::default());
@@ -100,9 +108,10 @@ impl Osu {
 
     fn init_screen(&self, instance: &mut Instance) {
         let (max_x, max_y) = self.screen_size();
+        let (margin_x, margin_y) = self.screen_margin();
 
-        for x in 0..=max_x {
-            for y in 0..=max_y {
+        for x in -margin_x..=max_x + margin_x {
+            for y in 0..=max_y + 2 * margin_y {
                 instance.set_block(
                     BlockPos { x, y, z: 1 },
                     Block::new(BlockState::BLACK_CONCRETE),
@@ -117,7 +126,7 @@ impl Osu {
         let block_pos = BlockPos {
             x: spawn_pos.x as i32,
             y: spawn_pos.y as i32 - 1,
-            z: spawn_pos.z as i32,
+            z: spawn_pos.z as i32 - 1,
         };
 
         instance.set_block(block_pos, Block::new(BlockState::BEDROCK));
@@ -128,6 +137,14 @@ impl Osu {
         let y = (DEFAULT_SCREEN_SIZE.1 * self.scale) as i32;
 
         (x, y)
+    }
+
+    fn screen_margin(&self) -> (i32, i32) {
+        let screen_size = self.screen_size();
+        let x = screen_size.0 as f64 * SCREEN_MARGIN_RATIO;
+        let y = screen_size.1 as f64 * SCREEN_MARGIN_RATIO;
+
+        (x as i32, y as i32)
     }
 
     pub fn player_spawn_pos(&self) -> DVec3 {
@@ -158,12 +175,16 @@ pub fn update_osu(
     mut osu: ResMut<Osu>,
     server: Res<Server>,
     mut commands: Commands,
-    mut osu_instances: Query<(Entity, &mut Instance), With<OsuInstance>>,
     mut hitcircles: Query<&mut Hitcircle>,
+    rings: Query<&Ring>,
     clients: Query<&Client>,
+    mut instances_set: ParamSet<(
+        Query<(Entity, &mut Instance), With<OsuInstance>>,
+        Query<&mut Instance>,
+    )>,
     mut swing_arm_events: EventReader<SwingArm>,
 ) {
-    let Ok(osu_instance) = osu_instances.get_single_mut() else {
+    if instances_set.p0().get_single().is_err() {
         warn!("Server should have one OsuInstance");
         return;
     };
@@ -191,6 +212,12 @@ pub fn update_osu(
             beatmap.state.misses += expired_hitcircles_count;
             for _ in 0..expired_hitcircles_count {
                 beatmap.state.active_hit_objects.pop_front();
+                let mut instances = instances_set.p1();
+                redraw_hitcircles(
+                    beatmap.state.active_hit_objects.iter(),
+                    &mut instances,
+                    &hitcircles,
+                )
             }
 
             if let Some(next_hitcircle) = beatmap
@@ -206,16 +233,21 @@ pub fn update_osu(
 
                 if threshold.as_millis() as u32 >= next_hitcircle.time() {
                     // Spawn hitcircle
+                    let screen_size = osu.screen_size();
+                    let margin_size = osu.screen_margin();
                     let center = DVec3::new(
-                        next_hitcircle.x() as f64 * osu.scale(),
-                        next_hitcircle.y() as f64 * osu.scale(),
+                        screen_size.0 as f64 - next_hitcircle.x() as f64 * osu.scale(),
+                        next_hitcircle.y() as f64 * osu.scale() + margin_size.1 as f64,
                         osu.screen_z,
                     );
+
                     let color = next_hitcircle.color();
                     let scale = osu.scale;
                     let combo_number = next_hitcircle.combo_number();
                     let tps = server.shared().tps() as usize;
 
+                    let mut osu_instances = instances_set.p0();
+                    let osu_instance = osu_instances.get_single_mut().unwrap();
                     match Hitcircle::from_beatmap(
                         center,
                         &beatmap.data,
@@ -240,31 +272,33 @@ pub fn update_osu(
             }
 
             // Check hitcircle hit
-            if let Some((entity, hitcircle)) =
-                beatmap
-                    .state
-                    .active_hit_objects
-                    .front()
-                    .and_then(|&entity| {
-                        hitcircles
-                            .get_mut(entity)
-                            .ok()
-                            .map(|hitcircle| (entity, hitcircle))
-                    })
-            {
+            if let Some(&hitcircle_entity) = beatmap.state.active_hit_objects.front() {
+                let mut instances = instances_set.p1();
                 for clicked_client in swing_arm_events
                     .iter()
                     .filter_map(|event| clients.get(event.client).ok())
                 {
-                    if let Some(hit) = hitcircle.hit_score(clicked_client) {
-                        match hit {
-                            HitScore::Hit300 => beatmap.state.hits300 += 1,
-                            HitScore::Hit100 => beatmap.state.hits100 += 1,
-                            HitScore::Hit50 => beatmap.state.hits50 += 1,
-                            HitScore::Miss => beatmap.state.misses += 1,
+                    if let Ok(hitcircle) = hitcircles.get(hitcircle_entity) {
+                        if let Some(hit) = hitcircle.hit_score(clicked_client) {
+                            match hit {
+                                HitScore::Hit300 => beatmap.state.hits300 += 1,
+                                HitScore::Hit100 => beatmap.state.hits100 += 1,
+                                HitScore::Hit50 => beatmap.state.hits50 += 1,
+                                HitScore::Miss => beatmap.state.misses += 1,
+                            }
+                            dbg!(hit);
+
+                            hitcircle
+                                .despawn(&mut commands, &rings, &mut instances)
+                                .unwrap();
+                            beatmap.state.active_hit_objects.pop_front();
+
+                            redraw_hitcircles(
+                                beatmap.state.active_hit_objects.iter(),
+                                &mut instances,
+                                &hitcircles,
+                            );
                         }
-                        commands.entity(entity).insert(Despawned);
-                        beatmap.state.active_hit_objects.pop_front();
                     }
                 }
             }
@@ -275,4 +309,18 @@ pub fn update_osu(
         }
         _ => None,
     };
+}
+
+fn redraw_hitcircles<'a>(
+    hitcircles: impl DoubleEndedIterator<Item = &'a Entity>,
+    instances: &mut Query<&mut Instance>,
+    hitcircles_query: &Query<&mut Hitcircle>,
+) {
+    for hitcircle in hitcircles
+        .rev()
+        .filter_map(|entity| hitcircles_query.get(*entity).ok())
+    {
+        let mut instance = instances.get_mut(hitcircle.instance()).unwrap();
+        hitcircle.draw_circle(&mut instance);
+    }
 }
