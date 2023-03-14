@@ -26,7 +26,6 @@ pub struct BeatmapState {
     pub hits50: usize,
     pub misses: usize,
     pub active_hit_objects: VecDeque<Entity>,
-    pub scores_to_spawn: Vec<HitScoreNumber>,
     pub next_hit_object_idx: usize,
 }
 

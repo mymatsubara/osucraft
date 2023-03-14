@@ -29,27 +29,30 @@ pub struct HitScoreNumber {
 }
 
 impl HitScoreNumber {
-    pub fn new(hit_score: HitScore, origin: BlockPos, ticks: usize, instance: Entity) -> Self {
-        Self {
+    pub fn new(
+        hit_score: HitScore,
+        origin: BlockPos,
+        ticks: usize,
+        mut instance: (Entity, Mut<Instance>),
+    ) -> Self {
+        let hit_score_number = Self {
             score: hit_score,
             ticks,
             origin,
-            instance,
-        }
-    }
+            instance: instance.0,
+        };
 
-    pub fn spawn(self, commands: &mut Commands, instances: &mut Query<&mut Instance>) -> Entity {
-        let block_state = match self.score {
-            HitScore::Hit300 => BlockState::LIGHT_BLUE_CONCRETE,
-            HitScore::Hit100 => BlockState::GREEN_CONCRETE,
-            HitScore::Hit50 => BlockState::YELLOW_CONCRETE,
-            HitScore::Miss => BlockState::RED_CONCRETE,
+        let block_state = match hit_score_number.score {
+            HitScore::Hit300 => BlockState::LIGHT_BLUE_STAINED_GLASS,
+            HitScore::Hit100 => BlockState::LIME_STAINED_GLASS,
+            HitScore::Hit50 => BlockState::ORANGE_STAINED_GLASS,
+            HitScore::Miss => BlockState::RED_STAINED_GLASS,
         };
         let block = Block::new(block_state);
 
-        self.draw(block, &mut instances.get_mut(self.instance).unwrap());
+        hit_score_number.draw(block, &mut instance.1);
 
-        commands.spawn(self).id()
+        hit_score_number
     }
 
     pub fn despawn(&self, instances: &mut Query<&mut Instance>) {

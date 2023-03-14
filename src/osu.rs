@@ -7,7 +7,7 @@ use std::{
 };
 use tracing::warn;
 
-use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*, Despawned};
+use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*};
 
 use crate::{
     audio::AudioPlayer,
@@ -195,13 +195,6 @@ pub fn update_osu(
         }
         // Beatmap is playing
         Some(mut beatmap) => {
-            // Spawn HitScoreNumbers
-            for score_to_spawn in beatmap.state.scores_to_spawn.clone() {
-                let mut instances = instances_set.p1();
-                score_to_spawn.spawn(&mut commands, &mut instances);
-            }
-            beatmap.state.scores_to_spawn.clear();
-
             // Remove expired hitcircles
             let expired_hitcircles_count = beatmap
                 .state
@@ -288,11 +281,11 @@ pub fn update_osu(
                             dbg!(hit);
 
                             let mut osu_instances = instances_set.p0();
-                            let osu_instance = osu_instances.get_single_mut().unwrap().0;
-                            beatmap.state.scores_to_spawn.push(HitScoreNumber::new(
+                            let osu_instance = osu_instances.get_single_mut().unwrap();
+                            commands.spawn(HitScoreNumber::new(
                                 hit,
-                                BlockPos::at(hitcircle.center()),
-                                40,
+                                BlockPos::at(hitcircle.center() + DVec3::new(0.0, 0.0, -1.0)),
+                                5,
                                 osu_instance,
                             ));
 
