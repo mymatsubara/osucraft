@@ -12,7 +12,7 @@ use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*, Despawn
 use crate::{
     audio::AudioPlayer,
     beatmap::{Beatmap, OverallDifficulty},
-    hit_score::{HitScore, HitScoreNumber},
+    hit_score::HitScore,
     hitcircle::Hitcircle,
     ring::Ring,
 };

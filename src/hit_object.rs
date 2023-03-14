@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use osu_file_parser::{colours::Colour, OsuFile};
 
@@ -6,6 +8,8 @@ use crate::{
     color::{Color, DEFAULT_COMBO_COLORS},
     hitcircle::HitcircleRadius,
 };
+
+const OVERLAP_THRESHOLD_MS: u32 = 1200;
 
 #[derive(Default)]
 /// https://osu.ppy.sh/wiki/en/Client/File_formats/Osu_%28file_format%29#hit-objects
@@ -96,14 +100,15 @@ impl HitObject {
     // Calculate z value such that there is no overlap with other hitcircles
     //
     // `remaining`: is the list of the remaining hitobjects in the song ordered in chronological order.
-    pub fn z(&self, remaining: &[HitObject], cs: CircleSize) -> i32 {
-        match remaining.first() {
-            Some(next) => {
-                if self.intersect(next, cs) {
-                    next.z(&remaining[1..], cs) - 1
-                } else {
-                    0
-                }
+    pub fn z(&self, remaining: &[HitObject], _cs: CircleSize) -> i32 {
+        match remaining
+            .iter()
+            .take_while(|other| other.time < self.time + OVERLAP_THRESHOLD_MS)
+            .enumerate()
+            .find(|(_, other)| self.intersect(other, _cs))
+        {
+            Some((overlapping_idx, _)) => {
+                remaining[overlapping_idx].z(&remaining[overlapping_idx + 1..], _cs) - 1
             }
             None => 0,
         }
