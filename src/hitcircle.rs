@@ -8,7 +8,7 @@ use crate::{
     beatmap::{BeatmapData, CircleSize},
     color::Color,
     digit::{DigitWriter, TextPosition},
-    hit_score::HitScore,
+    hit_score::{HitScore, HitScoreNumber},
     minecraft::{to_ticks, PLAYER_EYE_OFFSET},
     osu::Hitwindow,
     ring::Ring,
@@ -46,14 +46,16 @@ pub struct HitcircleBlocks {
 
 pub fn update_hitcircle(
     mut commands: Commands,
-    mut hitcircles: Query<(Entity, &mut Hitcircle)>,
-    mut rings: Query<&Ring>,
-    mut instances: Query<&mut Instance>,
+    mut hitcircles: Query<(Entity, &mut Hitcircle), Without<Despawned>>,
+    rings: Query<&Ring>,
+    mut instances: Query<(Entity, &mut Instance)>,
 ) {
     for (entity, mut hitcircle) in &mut hitcircles {
         if hitcircle.ticks == 0 {
             commands.entity(entity).insert(Despawned);
-            if let Err(error) = hitcircle.despawn(&mut commands, &mut rings, &mut instances) {
+            if let Err(error) =
+                hitcircle.despawn(&mut commands, &rings, &mut instances, HitScore::Miss)
+            {
                 warn!("Error while despawning hitcircle: {}", error);
             };
         } else {
@@ -178,12 +180,11 @@ impl Hitcircle {
         &self,
         commands: &mut Commands,
         rings: &Query<&Ring>,
-        instances: &mut Query<&mut Instance>,
+        instances: &mut Query<(Entity, &mut Instance)>,
+        hit: HitScore,
     ) -> Result<()> {
-        self.fill(
-            &mut instances.get_mut(self.instance).unwrap(),
-            &Block::new(BlockState::AIR),
-        );
+        let mut instance = instances.get_mut(self.instance)?;
+        self.fill(&mut instance.1, &Block::new(BlockState::AIR));
 
         if let Ok(ring) = rings.get(self.circle_ring) {
             ring.despawn(commands);
@@ -191,6 +192,13 @@ impl Hitcircle {
         if let Ok(approach_circle) = rings.get(self.approach_circle) {
             approach_circle.despawn(commands);
         }
+
+        commands.spawn(HitScoreNumber::new(
+            hit,
+            BlockPos::at(self.center() + DVec3::new(0.0, 0.0, -1.0)),
+            5,
+            instance,
+        ));
 
         Ok(())
     }

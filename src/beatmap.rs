@@ -18,7 +18,7 @@ pub struct BeatmapData {
     pub hit_objects: Vec<HitObject>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct BeatmapState {
     pub play_time: Duration,
     pub hits300: usize,

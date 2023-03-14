@@ -7,7 +7,7 @@ use std::{
 };
 use tracing::warn;
 
-use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*};
+use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*, Despawned};
 
 use crate::{
     audio::AudioPlayer,
@@ -173,7 +173,7 @@ pub fn update_osu(
     clients: Query<&Client>,
     mut instances_set: ParamSet<(
         Query<(Entity, &mut Instance), With<OsuInstance>>,
-        Query<&mut Instance>,
+        Query<(Entity, &mut Instance)>,
     )>,
     mut swing_arm_events: EventReader<SwingArm>,
 ) {
@@ -191,6 +191,7 @@ pub fn update_osu(
                 && beatmap.state.next_hit_object_idx >= beatmap.data.hit_objects.len()
                 && osu.audio_player.has_finished() =>
         {
+            dbg!(beatmap.state);
             None
         }
         // Beatmap is playing
@@ -280,18 +281,10 @@ pub fn update_osu(
 
                             dbg!(hit);
 
-                            let mut osu_instances = instances_set.p0();
-                            let osu_instance = osu_instances.get_single_mut().unwrap();
-                            commands.spawn(HitScoreNumber::new(
-                                hit,
-                                BlockPos::at(hitcircle.center() + DVec3::new(0.0, 0.0, -1.0)),
-                                5,
-                                osu_instance,
-                            ));
-
                             let mut instances = instances_set.p1();
+                            commands.entity(hitcircle_entity).insert(Despawned);
                             hitcircle
-                                .despawn(&mut commands, &rings, &mut instances)
+                                .despawn(&mut commands, &rings, &mut instances, hit)
                                 .unwrap();
                             beatmap.state.active_hit_objects.pop_front();
                         }
