@@ -7,7 +7,7 @@ use osucraft::plugin::OsuPlugin;
 use rand::Rng;
 use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
-use valence::client::event::{default_event_handler, SwingArm};
+use valence::client::event::default_event_handler;
 use valence::prelude::*;
 
 #[derive(Component)]
@@ -102,7 +102,7 @@ fn test(mut osu: ResMut<Osu>) {
     if osu.has_finished_music() {
         println!("Music is playing");
         osu.play(
-            r"C:\Users\Murilo\AppData\Local\osu!\Songs\1916172 kessoku band - Nani ga Warui\kessoku band - Nani ga Warui (Shirahane Suou) [Hard].osu",
+            r"C:\Users\Murilo\AppData\Local\osu!\Songs\682290 Hige Driver - Miracle Sugite Yabai (feat shully)\Hige Driver - Miracle Sugite Yabai (feat. shully) (Milan-) [Hard].osu",
         )
         .unwrap();
     }

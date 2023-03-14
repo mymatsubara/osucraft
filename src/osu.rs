@@ -12,6 +12,7 @@ use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*, Despawn
 use crate::{
     audio::AudioPlayer,
     beatmap::{Beatmap, OverallDifficulty},
+    hit_score::{HitScore, HitScoreNumber},
     hitcircle::Hitcircle,
     ring::Ring,
 };
@@ -41,14 +42,6 @@ pub struct Hitwindow {
     pub window_300: Duration,
     pub window_100: Duration,
     pub window_50: Duration,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum HitScore {
-    Hit300,
-    Hit100,
-    Hit50,
-    Miss,
 }
 
 impl Osu {
@@ -175,7 +168,7 @@ pub fn update_osu(
     mut osu: ResMut<Osu>,
     server: Res<Server>,
     mut commands: Commands,
-    mut hitcircles: Query<&mut Hitcircle>,
+    hitcircles: Query<&mut Hitcircle>,
     rings: Query<&Ring>,
     clients: Query<&Client>,
     mut instances_set: ParamSet<(
@@ -202,6 +195,13 @@ pub fn update_osu(
         }
         // Beatmap is playing
         Some(mut beatmap) => {
+            // Spawn HitScoreNumbers
+            for score_to_spawn in beatmap.state.scores_to_spawn.clone() {
+                let mut instances = instances_set.p1();
+                score_to_spawn.spawn(&mut commands, &mut instances);
+            }
+            beatmap.state.scores_to_spawn.clear();
+
             // Remove expired hitcircles
             let expired_hitcircles_count = beatmap
                 .state
@@ -272,7 +272,6 @@ pub fn update_osu(
 
             // Check hitcircle hit
             if let Some(&hitcircle_entity) = beatmap.state.active_hit_objects.front() {
-                let mut instances = instances_set.p1();
                 for clicked_client in swing_arm_events
                     .iter()
                     .filter_map(|event| clients.get(event.client).ok())
@@ -286,6 +285,18 @@ pub fn update_osu(
                                 HitScore::Miss => beatmap.state.misses += 1,
                             }
 
+                            dbg!(hit);
+
+                            let mut osu_instances = instances_set.p0();
+                            let osu_instance = osu_instances.get_single_mut().unwrap().0;
+                            beatmap.state.scores_to_spawn.push(HitScoreNumber::new(
+                                hit,
+                                BlockPos::at(hitcircle.center()),
+                                40,
+                                osu_instance,
+                            ));
+
+                            let mut instances = instances_set.p1();
                             hitcircle
                                 .despawn(&mut commands, &rings, &mut instances)
                                 .unwrap();

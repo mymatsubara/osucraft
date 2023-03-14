@@ -8,8 +8,9 @@ use crate::{
     beatmap::{BeatmapData, CircleSize},
     color::Color,
     digit::{DigitWriter, TextPosition},
+    hit_score::HitScore,
     minecraft::{to_ticks, PLAYER_EYE_OFFSET},
-    osu::{HitScore, Hitwindow},
+    osu::Hitwindow,
     ring::Ring,
 };
 
@@ -207,6 +208,10 @@ impl Hitcircle {
         self.instance
     }
 
+    pub fn center(&self) -> DVec3 {
+        self.center
+    }
+
     fn fill(&self, instance: &mut Mut<Instance>, block: &Block) {
         self.circle_block_positions().for_each(|pos| {
             instance.set_block(pos, block.clone());
@@ -220,11 +225,7 @@ impl Hitcircle {
             scale: max((self.radius / 5.5) as usize, 1),
             position: TextPosition::Center,
         }
-        .iter_block_positions(combo_number as usize, origin)
-        .flatten()
-        .for_each(|pos| {
-            instance.set_block(pos, block.clone());
-        });
+        .draw(combo_number as usize, origin, block, instance);
     }
 
     fn circle_block_positions(&self) -> impl Iterator<Item = BlockPos> {

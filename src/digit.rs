@@ -14,6 +14,20 @@ pub struct DigitWriter {
 }
 
 impl DigitWriter {
+    pub fn draw(
+        &self,
+        number: usize,
+        origin: BlockPos,
+        block: Block,
+        instance: &mut Mut<Instance>,
+    ) {
+        self.iter_block_positions(number, origin)
+            .flatten()
+            .for_each(|pos| {
+                instance.set_block(pos, block.clone());
+            });
+    }
+
     pub fn iter_block_positions(
         &self,
         number: usize,

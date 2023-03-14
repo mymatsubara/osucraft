@@ -4,7 +4,7 @@ use std::{collections::VecDeque, num::ParseFloatError, time::Duration};
 
 use bevy_ecs::prelude::Entity;
 
-use crate::{hit_object::HitObject, minecraft::to_ticks};
+use crate::{hit_object::HitObject, hit_score::HitScoreNumber, minecraft::to_ticks};
 
 pub struct Beatmap {
     pub data: BeatmapData,
@@ -26,6 +26,7 @@ pub struct BeatmapState {
     pub hits50: usize,
     pub misses: usize,
     pub active_hit_objects: VecDeque<Entity>,
+    pub scores_to_spawn: Vec<HitScoreNumber>,
     pub next_hit_object_idx: usize,
 }
 
