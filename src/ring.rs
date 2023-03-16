@@ -65,7 +65,7 @@ impl Ring {
         let center = center.into();
 
         // Calculate block positions/yaw/
-        let number_of_blocks = (1.8 * TAU * radius) as u32;
+        let number_of_blocks = (1.7 * TAU * radius) as u32;
         let d_angle = TAU / number_of_blocks as f64;
         let armor_stands = (0..number_of_blocks)
             .map(|n| {

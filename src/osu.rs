@@ -7,7 +7,13 @@ use std::{
 };
 use tracing::warn;
 
-use valence::{client::event::SwingArm, instance::ChunkEntry, prelude::*, Despawned};
+use valence::{
+    client::event::{DropItem, SwapItemInHand, SwingArm},
+    instance::ChunkEntry,
+    prelude::*,
+    protocol::{types::SoundCategory, Sound},
+    Despawned,
+};
 
 use crate::{
     audio::AudioPlayer,
@@ -22,7 +28,7 @@ const DEFAULT_SCREEN_SIZE: (f64, f64) = (640.0, 480.0);
 const DEFAULT_SPAWN_POS: DVec3 = DVec3::new(
     DEFAULT_SCREEN_SIZE.0 / 1.75,
     DEFAULT_SCREEN_SIZE.1 * (1.0 + 2.0 * SCREEN_MARGIN_RATIO) / 2.25,
-    -450.0,
+    -500.0,
 );
 const OSU_DEFAULT_AUDIO_FILE: &str = "audio.mp3";
 
@@ -170,12 +176,14 @@ pub fn update_osu(
     mut commands: Commands,
     hitcircles: Query<&mut Hitcircle>,
     rings: Query<&Ring>,
-    clients: Query<&Client>,
+    mut clients: Query<&mut Client>,
     mut instances_set: ParamSet<(
         Query<(Entity, &mut Instance), With<OsuInstance>>,
         Query<(Entity, &mut Instance)>,
     )>,
     mut swing_arm_events: EventReader<SwingArm>,
+    mut drop_item_events: EventReader<DropItem>,
+    mut swap_item_hand_events: EventReader<SwapItemInHand>,
 ) {
     if instances_set.p0().get_single().is_err() {
         warn!("Server should have one OsuInstance");
@@ -206,6 +214,10 @@ pub fn update_osu(
             beatmap.state.misses += expired_hitcircles_count;
             for _ in 0..expired_hitcircles_count {
                 beatmap.state.active_hit_objects.pop_front();
+
+                for mut client in &mut clients {
+                    play_hit_sound(&mut client, HitScore::Miss);
+                }
             }
 
             if let Some(next_hitobject) = beatmap
@@ -266,12 +278,18 @@ pub fn update_osu(
 
             // Check hitcircle hit
             if let Some(&hitcircle_entity) = beatmap.state.active_hit_objects.front() {
-                for clicked_client in swing_arm_events
+                for clicked_client_entity in swing_arm_events
                     .iter()
-                    .filter_map(|event| clients.get(event.client).ok())
+                    .map(|e| e.client)
+                    .chain(swap_item_hand_events.iter().map(|e| e.client))
+                    .chain(drop_item_events.iter().map(|e| e.client))
                 {
+                    let Ok(mut clicked_client) = clients.get_mut(clicked_client_entity) else {
+                        continue;
+                    };
+
                     if let Ok(hitcircle) = hitcircles.get(hitcircle_entity) {
-                        if let Some(hit) = hitcircle.hit_score(clicked_client) {
+                        if let Some(hit) = hitcircle.hit_score(&clicked_client) {
                             match hit {
                                 HitScore::Hit300 => beatmap.state.hits300 += 1,
                                 HitScore::Hit100 => beatmap.state.hits100 += 1,
@@ -281,6 +299,10 @@ pub fn update_osu(
 
                             dbg!(hit);
 
+                            // Play hitsound
+                            play_hit_sound(&mut clicked_client, hit);
+
+                            // Despawn hit hitcircle
                             let mut instances = instances_set.p1();
                             commands.entity(hitcircle_entity).insert(Despawned);
                             hitcircle
@@ -298,4 +320,14 @@ pub fn update_osu(
         }
         _ => None,
     };
+}
+
+fn play_hit_sound(client: &mut Mut<Client>, hit: HitScore) {
+    let (sound, category) = if matches!(hit, HitScore::Miss) {
+        (Sound::EntityChickenHurt, SoundCategory::Block)
+    } else {
+        (Sound::EntityChickenEgg, SoundCategory::Block)
+    };
+    let position = client.position();
+    client.play_sound(sound, category, position, 3.0, 1.0);
 }

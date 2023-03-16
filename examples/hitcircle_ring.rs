@@ -7,8 +7,12 @@ use osucraft::plugin::OsuPlugin;
 use rand::Rng;
 use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
-use valence::client::event::default_event_handler;
+use valence::client::event::{
+    default_event_handler, DropItem, PlayerInput, SetHeldItem, SwapItemInHand,
+};
 use valence::prelude::*;
+use valence::protocol::types::SoundCategory;
+use valence::protocol::Sound;
 
 #[derive(Component)]
 struct Test;
@@ -27,7 +31,7 @@ pub fn main() {
         .add_system(init_clients)
         .add_system(despawn_disconnected_clients)
         .add_system(test)
-        .insert_resource(Osu::new(0.4, audio_player))
+        .insert_resource(Osu::new(0.3, audio_player))
         .run();
 }
 
@@ -98,11 +102,11 @@ fn spawn_hitcircle_rings(
     }
 }
 
-fn test(mut osu: ResMut<Osu>) {
+fn test(mut osu: ResMut<Osu>, mut clients: Query<&mut Client>) {
     if osu.has_finished_music() {
         println!("Music is playing");
         osu.play(
-            r"C:\Users\Murilo\AppData\Local\osu!\Songs\682290 Hige Driver - Miracle Sugite Yabai (feat shully)\Hige Driver - Miracle Sugite Yabai (feat. shully) (Milan-) [Hard].osu",
+            r"C:\Users\Murilo\AppData\Local\osu!\Songs\65545 Otokaze - Ame Michi\Otokaze - Ame Michi (Flower) [Hard].osu",
         )
         .unwrap();
     }

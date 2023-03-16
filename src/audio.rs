@@ -33,6 +33,7 @@ struct DecoderExecution {
 impl AudioPlayer {
     pub fn new(stream_handle: &OutputStreamHandle) -> Result<Self> {
         let sink = Sink::try_new(stream_handle)?;
+        sink.set_volume(0.25);
 
         Ok(Self {
             sink,
