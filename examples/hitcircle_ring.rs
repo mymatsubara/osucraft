@@ -1,5 +1,5 @@
 use osucraft::audio::AudioPlayer;
-use osucraft::beatmap::{ApproachRate, BeatmapData, CircleSize, OverallDifficulty};
+use osucraft::beatmap::{ApproachRate, BeatmapData, CircleSize, HpDrainRate, OverallDifficulty};
 use osucraft::color::Color;
 use osucraft::hitcircle::Hitcircle;
 use osucraft::osu::{Osu, OsuInstance};
@@ -73,6 +73,7 @@ fn spawn_hitcircle_rings(
             ar: ApproachRate(9.0),
             od: OverallDifficulty(8.0),
             cs: CircleSize(4.5),
+            hp: HpDrainRate(5.0),
             hit_objects: vec![],
         };
 
@@ -106,7 +107,7 @@ fn test(mut osu: ResMut<Osu>, mut clients: Query<&mut Client>) {
     if osu.has_finished_music() {
         println!("Music is playing");
         osu.play(
-            r"C:\Users\Murilo\AppData\Local\osu!\Songs\65545 Otokaze - Ame Michi\Otokaze - Ame Michi (Flower) [Hard].osu",
+            r"C:\Users\Murilo\AppData\Local\osu!\Songs\682290 Hige Driver - Miracle Sugite Yabai (feat shully)\Hige Driver - Miracle Sugite Yabai (feat. shully) (Milan-) [Hard].osu",
         )
         .unwrap();
     }

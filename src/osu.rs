@@ -214,6 +214,7 @@ pub fn update_osu(
             beatmap.state.misses += expired_hitcircles_count;
             for _ in 0..expired_hitcircles_count {
                 beatmap.state.active_hit_objects.pop_front();
+                beatmap.state.combo = 0;
 
                 for mut client in &mut clients {
                     play_hit_sound(&mut client, HitScore::Miss);
@@ -290,6 +291,21 @@ pub fn update_osu(
 
                     if let Ok(hitcircle) = hitcircles.get(hitcircle_entity) {
                         if let Some(hit) = hitcircle.hit_score(&clicked_client) {
+                            // Update score (https://osu.ppy.sh/wiki/en/Gameplay/Score/ScoreV1/osu%21#hit-circles)
+                            let combo = beatmap.state.combo;
+                            let combo_multiplier = if combo == 0 { 0 } else { combo - 1 };
+                            let difficulty_multiplier = beatmap.data.difficulty_multiplier();
+                            let mod_multiplier = 1.0; // Mods not implemented
+
+                            beatmap.state.score += (hit.value() as f64
+                                * (1.0
+                                    + (combo_multiplier as f64
+                                        * difficulty_multiplier
+                                        * mod_multiplier)
+                                        / 25.0))
+                                as usize;
+
+                            // Update hit scores
                             match hit {
                                 HitScore::Hit300 => beatmap.state.hits300 += 1,
                                 HitScore::Hit100 => beatmap.state.hits100 += 1,
@@ -297,7 +313,18 @@ pub fn update_osu(
                                 HitScore::Miss => beatmap.state.misses += 1,
                             }
 
+                            // Update combo
+                            match hit {
+                                HitScore::Hit300 | HitScore::Hit100 | HitScore::Hit50 => {
+                                    beatmap.state.combo += 1;
+                                    beatmap.state.max_combo =
+                                        beatmap.state.max_combo.max(beatmap.state.combo);
+                                }
+                                HitScore::Miss => beatmap.state.combo = 0,
+                            }
+
                             dbg!(hit);
+                            dbg!(&beatmap.state);
 
                             // Play hitsound
                             play_hit_sound(&mut clicked_client, hit);

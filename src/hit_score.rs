@@ -28,6 +28,17 @@ pub struct HitScoreNumber {
     instance: Entity,
 }
 
+impl HitScore {
+    pub fn value(&self) -> usize {
+        match self {
+            HitScore::Hit300 => 300,
+            HitScore::Hit100 => 100,
+            HitScore::Hit50 => 50,
+            HitScore::Miss => 0,
+        }
+    }
+}
+
 impl HitScoreNumber {
     pub fn new(
         hit_score: HitScore,

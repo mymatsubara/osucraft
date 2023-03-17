@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
 use osu_file_parser::{Decimal, OsuFile};
-use std::{collections::VecDeque, num::ParseFloatError, time::Duration};
+use std::{cmp::min, collections::VecDeque, num::ParseFloatError, time::Duration};
 
 use bevy_ecs::prelude::Entity;
 
-use crate::{hit_object::HitObject, hit_score::HitScoreNumber, minecraft::to_ticks};
+use crate::{hit_object::HitObject, minecraft::to_ticks};
 
 pub struct Beatmap {
     pub data: BeatmapData,
@@ -15,6 +15,7 @@ pub struct BeatmapData {
     pub od: OverallDifficulty,
     pub ar: ApproachRate,
     pub cs: CircleSize,
+    pub hp: HpDrainRate,
     pub hit_objects: Vec<HitObject>,
 }
 
@@ -27,6 +28,9 @@ pub struct BeatmapState {
     pub misses: usize,
     pub active_hit_objects: VecDeque<Entity>,
     pub next_hit_object_idx: usize,
+    pub score: usize,
+    pub combo: usize,
+    pub max_combo: usize,
 }
 
 #[derive(Copy, Clone)]
@@ -36,7 +40,44 @@ pub struct OverallDifficulty(pub f64);
 pub struct ApproachRate(pub f64);
 
 #[derive(Copy, Clone)]
+pub struct HpDrainRate(pub f64);
+
+#[derive(Copy, Clone)]
 pub struct CircleSize(pub f64);
+
+impl BeatmapState {
+    pub fn accuracy(&self) -> f32 {
+        (self.hits300 as f32 * 100.0
+            + self.hits100 as f32 * 100.0 / 3.0
+            + self.hits50 as f32 * 100.0 / 6.0)
+            / (self.hits300 + self.hits100 + self.hits50 + self.misses) as f32
+    }
+}
+
+impl BeatmapData {
+    /// https://osu.ppy.sh/wiki/en/Gameplay/Score/ScoreV1/osu%21#difficulty-multiplier
+    pub fn difficulty_multiplier(&self) -> f64 {
+        ((self.hp.0
+            + self.cs.0
+            + self.od.0
+            + (self.hit_objects.len() as f64 / self.drain_time().as_secs() as f64 * 8.0).min(16.0))
+            / 38.0
+            * 5.0)
+            .round()
+    }
+
+    /// Drain time without breaks
+    pub fn drain_time(&self) -> Duration {
+        if self.hit_objects.is_empty() {
+            Duration::ZERO
+        } else {
+            Duration::from_millis(
+                (self.hit_objects.last().unwrap().time() - self.hit_objects.first().unwrap().time())
+                    as u64,
+            )
+        }
+    }
+}
 
 impl TryFrom<OsuFile> for Beatmap {
     type Error = anyhow::Error;
@@ -64,6 +105,12 @@ impl TryFrom<OsuFile> for Beatmap {
                     difficulty
                         .approach_rate
                         .ok_or(anyhow!("beatmap does not contain approach rate"))?
+                        .into(),
+                )?),
+                hp: HpDrainRate(to_f64(
+                    difficulty
+                        .hp_drain_rate
+                        .ok_or(anyhow!("beatmap does no contain hp drain rate"))?
                         .into(),
                 )?),
                 hit_objects: HitObject::from(&osu_file)?,
@@ -171,5 +218,21 @@ mod test {
         let fade_in = ar.to_fade_in_duration();
         assert_eq!(preempt, Duration::from_millis(1680));
         assert_eq!(fade_in, Duration::from_millis(1120));
+    }
+
+    #[test]
+    fn beatmap_state_accuracy() {
+        let state = BeatmapState {
+            hits300: 438,
+            hits100: 9,
+            hits50: 1,
+            misses: 0,
+            score: 7_062_746,
+            combo: 649,
+            ..Default::default()
+        };
+
+        let expected_acc = 98.47;
+        assert!((state.accuracy() - expected_acc).abs() < 0.01);
     }
 }
