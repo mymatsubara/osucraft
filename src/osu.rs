@@ -11,7 +11,11 @@ use valence::{
     client::event::{DropItem, SwapItemInHand, SwingArm},
     instance::ChunkEntry,
     prelude::*,
-    protocol::{types::SoundCategory, Sound},
+    protocol::{
+        packets::s2c::play::BossBar,
+        types::{BossBarAction, BossBarColor, BossBarDivision, BossBarFlags, SoundCategory},
+        Sound,
+    },
     Despawned,
 };
 
@@ -41,6 +45,7 @@ pub struct Osu {
     screen_z: f64,
     cur_beatmap: Option<Beatmap>,
     audio_player: AudioPlayer,
+    life_bar_uuid: Uuid,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -56,6 +61,7 @@ impl Osu {
             scale,
             screen_z: 0.0,
             cur_beatmap: None,
+            life_bar_uuid: Uuid::new_v4(),
             audio_player,
         }
     }
@@ -200,6 +206,12 @@ pub fn update_osu(
                 && osu.audio_player.has_finished() =>
         {
             dbg!(beatmap.state);
+
+            None
+        }
+        // Failed beatmap
+        Some(beatmap) if beatmap.state.health == 0.0 => {
+            osu.audio_player.stop();
             None
         }
         // Beatmap is playing
@@ -215,6 +227,8 @@ pub fn update_osu(
             for _ in 0..expired_hitcircles_count {
                 beatmap.state.active_hit_objects.pop_front();
                 beatmap.state.combo = 0;
+                // Update health
+                beatmap.state.health = beatmap.data.hp.drain(beatmap.state.health, HitScore::Miss);
 
                 for mut client in &mut clients {
                     play_hit_sound(&mut client, HitScore::Miss);
@@ -329,6 +343,9 @@ pub fn update_osu(
                             // Play hitsound
                             play_hit_sound(&mut clicked_client, hit);
 
+                            // Update health
+                            beatmap.state.health = beatmap.data.hp.drain(beatmap.state.health, hit);
+
                             // Despawn hit hitcircle
                             let mut instances = instances_set.p1();
                             commands.entity(hitcircle_entity).insert(Despawned);
@@ -341,7 +358,36 @@ pub fn update_osu(
                 }
             }
 
-            // Update health
+            // Update health bar
+            for mut client in &mut clients {
+                let text = "Score: ".color(Color::GOLD)
+                    + beatmap.state.score.to_string().color(Color::WHITE)
+                    + "   Combo: ".color(Color::LIGHT_PURPLE)
+                    + format!("x{}", beatmap.state.combo).color(Color::WHITE)
+                    + "   Acc: ".color(Color::GREEN)
+                    + format!("{:.2}%", beatmap.state.accuracy()).color(Color::WHITE);
+
+                client.write_packet(&BossBar {
+                    id: osu.life_bar_uuid,
+                    action: BossBarAction::Add {
+                        title: text,
+                        health: beatmap.state.health as f32,
+                        color: BossBarColor::Blue,
+                        division: BossBarDivision::TwentyNotches,
+                        flags: BossBarFlags::new(),
+                    },
+                });
+            }
+
+            // let text = "300: ".color(Color::BLUE)
+            //     + beatmap.state.hits300.to_string().color(Color::WHITE)
+            //     + "  100: ".color(Color::GREEN)
+            //     + beatmap.state.hits100.to_string().color(Color::WHITE)
+            //     + "  50: ".color(Color::YELLOW)
+            //     + beatmap.state.hits50.to_string().color(Color::WHITE)
+            //     + "  X: ".color(Color::RED)
+            //     + beatmap.state.misses.to_string().color(Color::WHITE);
+            // client.set_action_bar(text);
 
             Some(beatmap)
         }

@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
 use osu_file_parser::{Decimal, OsuFile};
 use std::{cmp::min, collections::VecDeque, num::ParseFloatError, time::Duration};
+use valence::uuid::Uuid;
 
 use bevy_ecs::prelude::Entity;
 
-use crate::{hit_object::HitObject, minecraft::to_ticks};
+use crate::{hit_object::HitObject, hit_score::HitScore, minecraft::to_ticks};
 
 pub struct Beatmap {
     pub data: BeatmapData,
@@ -19,7 +20,7 @@ pub struct BeatmapData {
     pub hit_objects: Vec<HitObject>,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct BeatmapState {
     pub play_time: Duration,
     pub hits300: usize,
@@ -31,6 +32,7 @@ pub struct BeatmapState {
     pub score: usize,
     pub combo: usize,
     pub max_combo: usize,
+    pub health: f64,
 }
 
 #[derive(Copy, Clone)]
@@ -45,12 +47,35 @@ pub struct HpDrainRate(pub f64);
 #[derive(Copy, Clone)]
 pub struct CircleSize(pub f64);
 
+impl Default for BeatmapState {
+    fn default() -> Self {
+        Self {
+            health: 1.0,
+            play_time: Default::default(),
+            hits300: 0,
+            hits100: 0,
+            hits50: 0,
+            misses: 0,
+            active_hit_objects: Default::default(),
+            next_hit_object_idx: Default::default(),
+            score: 0,
+            combo: 0,
+            max_combo: 0,
+        }
+    }
+}
+
 impl BeatmapState {
     pub fn accuracy(&self) -> f32 {
+        let divisor = self.hits300 + self.hits100 + self.hits50 + self.misses;
+        if divisor == 0 {
+            return 0.0;
+        }
+
         (self.hits300 as f32 * 100.0
             + self.hits100 as f32 * 100.0 / 3.0
             + self.hits50 as f32 * 100.0 / 6.0)
-            / (self.hits300 + self.hits100 + self.hits50 + self.misses) as f32
+            / divisor as f32
     }
 }
 
@@ -155,6 +180,19 @@ impl ApproachRate {
 
     pub fn to_mc_ticks(self, tps: usize) -> usize {
         to_ticks(tps, self.to_mc_duration())
+    }
+}
+
+impl HpDrainRate {
+    pub fn drain(&self, hp: f64, hit: HitScore) -> f64 {
+        let drain = match hit {
+            HitScore::Hit300 => 10.2 - self.0,
+            HitScore::Hit100 => 8.0 - self.0,
+            HitScore::Hit50 => 4.0 - self.0,
+            HitScore::Miss => -2.0 * self.0,
+        } / 100.0;
+
+        (hp + drain).clamp(0.0, 1.0)
     }
 }
 
