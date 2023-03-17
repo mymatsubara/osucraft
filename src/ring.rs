@@ -21,7 +21,7 @@ pub struct Ring {
 }
 
 #[derive(Component)]
-pub struct HitcircleRingPart;
+pub struct RingPart;
 
 impl Ring {
     // `speed` should be given in blocks per tick
@@ -93,10 +93,7 @@ impl Ring {
         Ok(ring)
     }
 
-    pub fn update_position(
-        &mut self,
-        ring_entities: &mut Query<&mut McEntity, With<HitcircleRingPart>>,
-    ) {
+    pub fn update_position(&mut self, ring_entities: &mut Query<&mut McEntity, With<RingPart>>) {
         if self.speed == 0.0 {
             return;
         }
@@ -118,6 +115,19 @@ impl Ring {
             });
     }
 
+    pub fn translate(
+        &self,
+        movement: DVec3,
+        ring_entities: &mut Query<&mut McEntity, With<RingPart>>,
+    ) {
+        self.armor_stands.iter().for_each(|entity| {
+            if let Ok(mut armor_stand) = ring_entities.get_mut(*entity) {
+                let new_pos = armor_stand.position() + movement;
+                armor_stand.set_position(new_pos);
+            }
+        });
+    }
+
     pub fn despawn(&self, commands: &mut Commands) {
         for armor_stand in &self.armor_stands {
             if let Some(mut armor_stand) = commands.get_entity(*armor_stand) {
@@ -133,7 +143,7 @@ fn create_rotated_item(
     rotation: EulerAngle,
     position: impl Into<DVec3>,
     instance: Entity,
-) -> (McEntity, Equipment, HitcircleRingPart) {
+) -> (McEntity, Equipment, RingPart) {
     // Equipment
     let mut equipment = Equipment::new();
     let item = ItemStack::new(item, 1, None);
@@ -150,7 +160,7 @@ fn create_rotated_item(
     let position = rotated_item_to_armor_stand_position(position, rotation);
     armor_stand.set_position(position);
 
-    (armor_stand, equipment, HitcircleRingPart {})
+    (armor_stand, equipment, RingPart {})
 }
 
 const ARMOR_STAND_OFFSET: DVec3 = DVec3::new(0.5, -2.2, 0.5);
@@ -178,7 +188,7 @@ fn to_radians(degrees: f64) -> f64 {
 pub fn update_rings(
     mut commands: Commands,
     mut rings: Query<(&mut Ring, Entity)>,
-    mut ring_entities: Query<&mut McEntity, With<HitcircleRingPart>>,
+    mut ring_entities: Query<&mut McEntity, With<RingPart>>,
 ) {
     for (mut ring, entity) in &mut rings {
         if ring.ticks == 0 {
