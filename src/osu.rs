@@ -379,16 +379,6 @@ pub fn update_osu(
                 });
             }
 
-            // let text = "300: ".color(Color::BLUE)
-            //     + beatmap.state.hits300.to_string().color(Color::WHITE)
-            //     + "  100: ".color(Color::GREEN)
-            //     + beatmap.state.hits100.to_string().color(Color::WHITE)
-            //     + "  50: ".color(Color::YELLOW)
-            //     + beatmap.state.hits50.to_string().color(Color::WHITE)
-            //     + "  X: ".color(Color::RED)
-            //     + beatmap.state.misses.to_string().color(Color::WHITE);
-            // client.set_action_bar(text);
-
             Some(beatmap)
         }
         _ => None,

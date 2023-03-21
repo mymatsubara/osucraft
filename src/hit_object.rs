@@ -40,7 +40,7 @@ impl Default for HitObjectParams {
 
 impl HitObject {
     pub fn from(osu_file: &OsuFile) -> Result<Vec<Self>> {
-        let mut combo_number = 1;
+        let mut combo_number = 0;
         let hitobjects = osu_file.hitobjects.clone().unwrap_or_default().0;
 
         let mut result = Vec::with_capacity(hitobjects.len());
