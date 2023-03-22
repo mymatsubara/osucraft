@@ -1,17 +1,18 @@
 use anyhow::{anyhow, Result};
 use osu_file_parser::{Decimal, OsuFile};
-use std::{cmp::min, collections::VecDeque, num::ParseFloatError, time::Duration};
-use valence::uuid::Uuid;
+use std::{collections::VecDeque, num::ParseFloatError, path::PathBuf, time::Duration};
 
 use bevy_ecs::prelude::Entity;
 
 use crate::{hit_object::HitObject, hit_score::HitScore, minecraft::to_ticks};
 
+#[derive(Clone)]
 pub struct Beatmap {
     pub data: BeatmapData,
     pub state: BeatmapState,
 }
 
+#[derive(Clone)]
 pub struct BeatmapData {
     pub od: OverallDifficulty,
     pub ar: ApproachRate,
@@ -194,6 +195,17 @@ impl HpDrainRate {
 
         (hp + drain).clamp(0.0, 1.0)
     }
+}
+
+pub fn audio_path_from(osu_file: &OsuFile, beatmap_dir: PathBuf) -> Option<PathBuf> {
+    let audio_file: PathBuf = osu_file
+        .general
+        .clone()
+        .and_then(|g| g.audio_filename.map(|f| f.into()))?;
+
+    let audio_path = beatmap_dir.join(audio_file);
+
+    audio_path.exists().then_some(audio_path)
 }
 
 #[cfg(test)]

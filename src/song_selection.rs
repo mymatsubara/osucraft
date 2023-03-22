@@ -5,18 +5,23 @@ use std::{cmp::min, fs::read_dir, path::PathBuf};
 use bevy_ecs::{
     prelude::{Component, Entity, EventReader},
     query::{Changed, With},
-    system::{Commands, Query},
+    system::{Commands, Query, ResMut},
 };
+use tracing::error;
 use valence::{
     client::event::ClickContainer,
     nbt::{compound, List},
     prelude::{Client, Color, Inventory, InventoryKind, OpenInventory},
-    protocol::{
-        packets::s2c::play::SetContainerContentEncode, ItemKind, ItemStack, TextFormat, VarInt,
-    },
+    protocol::{ItemKind, ItemStack, TextFormat},
 };
 
-const SONG_ITEM_KIND: ItemKind = ItemKind::Jukebox;
+use crate::{
+    beatmap_selection::BeatmapSelectionInventory,
+    inventory::{InventoriesToOpen, InventoryToOpen},
+    osu::{Osu, OsuStateChange},
+};
+
+pub const SONG_ITEM_KIND: ItemKind = ItemKind::Jukebox;
 const ARROW_ITEM_KIND: ItemKind = ItemKind::SpectralArrow;
 const PREVIOUS_PAGE_SLOT: u16 = 45;
 const NEXT_PAGE_SLOT: u16 = 53;
@@ -26,7 +31,6 @@ const PAGE_SIZE: usize = 36;
 pub struct SongSelectionInventory {
     cur_page: usize,
     songs: Vec<PathBuf>,
-    reopen_in_clients: Vec<Entity>,
 }
 
 struct Song {
@@ -43,7 +47,6 @@ impl SongSelectionInventory {
             Self {
                 cur_page: 0,
                 songs: Self::get_beatmaps()?,
-                reopen_in_clients: vec![],
             },
             inventory,
         ))
@@ -112,9 +115,18 @@ impl SongSelectionInventory {
         }
     }
 
-    pub fn refresh(&mut self, commands: &mut Commands, client: Entity) {
-        self.reopen_in_clients.push(client);
+    pub fn refresh(
+        &self,
+        commands: &mut Commands,
+        client: Entity,
+        inventories_to_open: &mut ResMut<InventoriesToOpen>,
+        new_inventory: Entity,
+    ) {
         commands.entity(client).remove::<OpenInventory>();
+        inventories_to_open.add(InventoryToOpen {
+            client,
+            open_inventory: OpenInventory::new(new_inventory),
+        })
     }
 }
 
@@ -181,50 +193,93 @@ pub fn update_song_selection_inventory(
 
 pub fn handle_song_selection_clicks(
     mut commands: Commands,
+    mut inventories_to_open: ResMut<InventoriesToOpen>,
+    mut osu: ResMut<Osu>,
     open_inventories: Query<(Entity, &OpenInventory), With<Client>>,
     mut song_selections: Query<&mut SongSelectionInventory>,
+    mut beatmap_selections: Query<(Entity, &mut BeatmapSelectionInventory)>,
+    mut clients: Query<&mut Client>,
     mut clicks: EventReader<ClickContainer>,
 ) {
     for click in clicks.iter() {
-        if let Some(mut song_selection) = open_inventories
+        if let Some((song_selection_entity, mut song_selection)) = open_inventories
             .iter()
             .find(|(client_entity, _)| *client_entity == click.client)
-            .and_then(|(client_entity, inventory)| song_selections.get_mut(inventory.entity()).ok())
+            .and_then(|(_, inventory)| {
+                Some((
+                    inventory.entity(),
+                    song_selections.get_mut(inventory.entity()).ok()?,
+                ))
+            })
         {
             // Clicked next page
             if click.slot_id as u16 == NEXT_PAGE_SLOT && song_selection.has_next_page() {
                 song_selection.go_to_next_page();
-                song_selection.refresh(&mut commands, click.client);
+                song_selection.refresh(
+                    &mut commands,
+                    click.client,
+                    &mut inventories_to_open,
+                    song_selection_entity,
+                );
             }
             // Clicked previous page
             else if click.slot_id as u16 == PREVIOUS_PAGE_SLOT
                 && song_selection.has_previous_page()
             {
                 song_selection.go_to_previous_page();
-                song_selection.refresh(&mut commands, click.client);
+                song_selection.refresh(
+                    &mut commands,
+                    click.client,
+                    &mut inventories_to_open,
+                    song_selection_entity,
+                );
             }
             if let Some(selected_song) = song_selection
                 .page_song_paths()
                 .get(click.slot_id.unsigned_abs() as usize)
             {
-                // Update beatmap selection inventory
-                todo!()
+                let mut click_client = commands.entity(click.client);
+
+                // Open beatmap selection
+                for (beatmap_selection_entity, mut beatmap_selection) in
+                    beatmap_selections.iter_mut().take(1)
+                {
+                    match beatmap_selection.load_beatmap_dir(selected_song) {
+                        Ok(beatmaps) => {
+                            // Open beatmap selection window
+                            song_selection.refresh(
+                                &mut commands,
+                                click.client,
+                                &mut inventories_to_open,
+                                beatmap_selection_entity,
+                            );
+
+                            // Update osu state
+                            if let Err(error) = osu.change_state(
+                                OsuStateChange::BeatmapSelection {
+                                    beatmap_dir: selected_song.clone(),
+                                    beatmaps: beatmaps.clone(),
+                                },
+                                &mut clients,
+                            ) {
+                                error!(
+                                    "Error while changing to BeatmapSelection state: '{}'",
+                                    error
+                                )
+                            }
+                        }
+                        Err(error) => {
+                            clients.get_mut(click.client).unwrap().send_message(
+                                format!(
+                                    "Error occurred while reading beatmap directory: '{}'",
+                                    error
+                                )
+                                .color(Color::RED),
+                            );
+                        }
+                    }
+                }
             }
         }
-    }
-}
-
-pub fn reopen_inventory(
-    mut commands: Commands,
-    mut song_selections: Query<(Entity, &mut SongSelectionInventory)>,
-) {
-    for (inventory, mut song_selection) in &mut song_selections {
-        for &client in song_selection.reopen_in_clients.iter() {
-            commands
-                .entity(client)
-                .insert(OpenInventory::new(inventory));
-        }
-
-        song_selection.reopen_in_clients.clear();
     }
 }

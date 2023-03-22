@@ -2,13 +2,13 @@ use bevy_ecs::schedule::{IntoSystemDescriptor, SystemSet};
 use valence::bevy_app::{CoreStage, Plugin};
 
 use crate::{
+    beatmap_selection::update_beatmap_selection_inventory,
     hit_score::update_score_hit_numbers,
     hitcircle::update_hitcircle,
+    inventory::{open_queued_inventories, InventoriesToOpen},
     osu::update_osu,
     ring::update_rings,
-    song_selection::{
-        handle_song_selection_clicks, reopen_inventory, update_song_selection_inventory,
-    },
+    song_selection::{handle_song_selection_clicks, update_song_selection_inventory},
 };
 
 pub struct OsuPlugin;
@@ -22,9 +22,11 @@ impl Plugin for OsuPlugin {
                 .with_system(update_rings)
                 .with_system(update_hitcircle)
                 .with_system(update_score_hit_numbers)
+                .with_system(open_queued_inventories)
                 .with_system(update_song_selection_inventory)
-                .with_system(handle_song_selection_clicks)
-                .with_system(reopen_inventory.before(handle_song_selection_clicks)),
-        );
+                .with_system(handle_song_selection_clicks.after(open_queued_inventories))
+                .with_system(update_beatmap_selection_inventory),
+        )
+        .init_resource::<InventoriesToOpen>();
     }
 }

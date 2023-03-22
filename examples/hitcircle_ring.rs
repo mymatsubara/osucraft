@@ -4,10 +4,8 @@ use osucraft::color::Color;
 use osucraft::hitcircle::Hitcircle;
 use osucraft::osu::{Osu, OsuInstance};
 use osucraft::plugin::OsuPlugin;
-use osucraft::song_selection::SongSelectionInventory;
 use rand::Rng;
 use rodio::OutputStream;
-use tracing::error;
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::{default_event_handler, ClickContainer, StartSneaking};
 use valence::prelude::*;
@@ -28,8 +26,8 @@ pub fn main() {
         .add_startup_system(setup)
         .add_system(init_clients)
         .add_system(despawn_disconnected_clients)
-        .add_system(test)
         .insert_resource(Osu::new(0.3, audio_player))
+        // .add_system(test)
         .run();
 }
 
@@ -37,16 +35,11 @@ fn setup(world: &mut World) {
     let server = world.resource::<Server>();
     let mut instance = server.new_instance(DimensionId::default());
 
+    // Init osu
     world.resource::<Osu>().init(&mut instance);
+    Osu::init_inventory_selections(world);
 
     world.spawn((instance, OsuInstance));
-
-    match SongSelectionInventory::new() {
-        Ok(song_selection) => {
-            world.spawn(song_selection);
-        }
-        Err(error) => error!("Error while setting up song selection: {}", error),
-    };
 }
 
 fn init_clients(
@@ -116,23 +109,4 @@ fn test(
     mut sneaking_events: EventReader<StartSneaking>,
     mut inventories: Query<(&mut Inventory, Entity), Without<Client>>,
 ) {
-    if osu.has_finished_music() {
-        println!("Music is playing");
-        osu.play(
-            r"C:\Users\Murilo\AppData\Local\osu!\Songs\682290 Hige Driver - Miracle Sugite Yabai (feat shully)\Hige Driver - Miracle Sugite Yabai (feat. shully) (Milan-) [Hard].osu",
-        )
-        .unwrap();
-    }
-
-    for event in events.iter() {
-        dbg!(event);
-    }
-
-    let (mut inventory, inventory_entity) = inventories.get_single_mut().unwrap();
-    for sneaking_event in sneaking_events.iter() {
-        let open_inventory = OpenInventory::new(inventory_entity);
-        commands
-            .entity(sneaking_event.client)
-            .insert(open_inventory);
-    }
 }

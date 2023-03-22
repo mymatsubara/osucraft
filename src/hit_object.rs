@@ -11,7 +11,7 @@ use crate::{
 
 const OVERLAP_THRESHOLD_MS: u32 = 1200;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 /// https://osu.ppy.sh/wiki/en/Client/File_formats/Osu_%28file_format%29#hit-objects
 pub struct HitObject {
     /// In osu!pixels
@@ -25,6 +25,7 @@ pub struct HitObject {
     params: HitObjectParams,
 }
 
+#[derive(Clone)]
 pub enum HitObjectParams {
     Hitcircle,
     Slider,
