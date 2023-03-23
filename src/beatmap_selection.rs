@@ -10,12 +10,9 @@ use valence::{
 };
 
 use bevy_ecs::{prelude::Component, query::Changed, system::Query};
-use osu_file_parser::{
-    metadata::{Artist, Title, Version},
-    Decimal, OsuFile,
-};
+use osu_file_parser::{Decimal, OsuFile};
 
-use crate::{beatmap::OverallDifficulty, song_selection};
+use crate::song_selection;
 
 const SONG_SELECTION_SLOT: u16 = 45;
 const LAST_SLOT: u16 = 53;

@@ -255,13 +255,10 @@ pub fn handle_song_selection_clicks(
                             );
 
                             // Update osu state
-                            if let Err(error) = osu.change_state(
-                                OsuStateChange::BeatmapSelection {
-                                    beatmap_dir: selected_song.clone(),
-                                    beatmaps: beatmaps.clone(),
-                                },
-                                &mut clients,
-                            ) {
+                            if let Err(error) = osu.change_state(OsuStateChange::BeatmapSelection {
+                                beatmap_dir: selected_song.clone(),
+                                beatmaps: beatmaps.clone(),
+                            }) {
                                 error!(
                                     "Error while changing to BeatmapSelection state: '{}'",
                                     error

@@ -94,18 +94,10 @@ impl Osu {
         self.init_player_spawn(instance);
     }
 
-    pub fn change_state(
-        &mut self,
-        state_change: OsuStateChange,
-        clients: &mut Query<&mut Client>,
-    ) -> Result<()> {
+    pub fn change_state(&mut self, state_change: OsuStateChange) -> Result<()> {
         self.audio_player.stop();
         match state_change {
             OsuStateChange::SongSelection => {
-                for mut client in clients {
-                    client.set_action_bar(r#"{{"keybind": "key.sneak"}}"#);
-                }
-
                 self.state = Some(OsuState::SongSelection);
             }
             OsuStateChange::BeatmapSelection {
@@ -117,10 +109,6 @@ impl Osu {
                         self.audio_player.set_music(audio_path)?;
                         self.audio_player.play();
                     }
-                }
-
-                for mut client in clients {
-                    client.set_action_bar(r#"{{"keybind": "key.sneak"}}"#);
                 }
 
                 self.state = Some(OsuState::BeatmapSelection);
@@ -139,20 +127,32 @@ impl Osu {
                 self.audio_player.set_music(audio_path)?;
                 self.audio_player.play();
 
-                for mut client in clients {
-                    client.set_action_bar("");
-                }
-
                 self.state = Some(OsuState::Playing(Beatmap::try_from(osu_file)?));
             }
             OsuStateChange::ScoreDisplay(beatmap) => {
                 warn!("TODO!!!! (set boss bar to display score)");
 
-                self.change_state(OsuStateChange::SongSelection, clients);
+                self.change_state(OsuStateChange::SongSelection);
             }
         };
 
         Ok(())
+    }
+
+    pub fn get_action_bar(&self) -> Text {
+        match self.state {
+            Some(OsuState::SongSelection) => {
+                "Sneak <LEFT SHIFT>".color(Color::GOLD)
+                    + " to open".color(Color::WHITE)
+                    + " SONG SELECTION".color(Color::BLUE)
+            }
+            Some(OsuState::BeatmapSelection) => {
+                "Sneak <LEFT SHIFT>".color(Color::GOLD)
+                    + " to open".color(Color::WHITE)
+                    + " BEATMAP SELECTION".color(Color::BLUE)
+            }
+            _ => "".into(),
+        }
     }
 
     fn init_chunks(&self, instance: &mut Instance) {
@@ -492,8 +492,12 @@ pub fn update_osu(
         }
     };
 
+    for mut client in &mut clients {
+        client.set_action_bar(osu.get_action_bar());
+    }
+
     if let Ok(Some(state_change)) = possible_state_change {
-        if let Err(error) = osu.change_state(state_change, &mut clients) {
+        if let Err(error) = osu.change_state(state_change) {
             error!("Error while changing osu state: '{}'", error)
         }
     }
