@@ -26,6 +26,7 @@ pub fn main() {
         .add_startup_system(setup)
         .add_system(init_clients)
         .add_system(despawn_disconnected_clients)
+        .add_system(reposition_clients)
         .insert_resource(Osu::new(0.3, audio_player))
         // .add_system(test)
         .run();
@@ -57,47 +58,11 @@ fn init_clients(
     }
 }
 
-fn spawn_hitcircle_rings(
-    mut commands: Commands,
-    hitcircles: Query<Entity, With<Hitcircle>>,
-    mut instances: Query<(Entity, &mut Instance)>,
-    osu: Res<Osu>,
-    server: Res<Server>,
-) {
-    if hitcircles.get_single().is_err() {
-        let tps = server.shared().tps() as usize;
-        let scale = osu.scale();
-        let beatmap = BeatmapData {
-            ar: ApproachRate(9.0),
-            od: OverallDifficulty(8.0),
-            cs: CircleSize(4.5),
-            hp: HpDrainRate(5.0),
-            hit_objects: vec![],
-        };
-
-        let spawn_pos = osu.player_spawn_pos();
-        let instance = instances.single_mut();
-        let center = DVec3::new(spawn_pos.x, spawn_pos.y, 0.0);
-
-        let pink = Color {
-            r: 233,
-            g: 102,
-            b: 161,
-        };
-        let combo_number = rand::thread_rng().gen_range(0..=9);
-
-        let ring = Hitcircle::from_beatmap(
-            center,
-            &beatmap,
-            pink,
-            scale,
-            combo_number,
-            tps,
-            instance,
-            &mut commands,
-        )
-        .unwrap();
-        commands.spawn(ring);
+fn reposition_clients(osu: Res<Osu>, mut clients: Query<&mut Client>) {
+    for mut client in &mut clients {
+        if client.position().y < 0.0 {
+            client.set_position(osu.player_spawn_pos());
+        }
     }
 }
 
