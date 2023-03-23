@@ -1,5 +1,5 @@
 use bevy_ecs::schedule::{IntoSystemDescriptor, SystemSet};
-use valence::bevy_app::{CoreStage, Plugin};
+use valence::bevy_app::Plugin;
 
 use crate::{
     beatmap_selection::{handle_beatmap_selection_clicks, update_beatmap_selection_inventory},

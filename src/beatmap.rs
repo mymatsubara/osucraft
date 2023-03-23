@@ -1,6 +1,10 @@
 use anyhow::{anyhow, Context, Result};
 use osu_file_parser::{Decimal, OsuFile};
 use std::{collections::VecDeque, num::ParseFloatError, path::PathBuf, time::Duration};
+use valence::{
+    prelude::Color,
+    protocol::{Text, TextFormat},
+};
 
 use bevy_ecs::prelude::Entity;
 
@@ -20,6 +24,9 @@ pub struct BeatmapData {
     pub hp: HpDrainRate,
     pub hit_objects: Vec<HitObject>,
     pub audio_path: PathBuf,
+    pub artist: String,
+    pub title: String,
+    pub difficulty_name: String,
 }
 
 #[derive(Clone, Debug)]
@@ -35,6 +42,15 @@ pub struct BeatmapState {
     pub combo: usize,
     pub max_combo: usize,
     pub health: f64,
+}
+
+pub enum Grade {
+    SS,
+    S,
+    A,
+    B,
+    C,
+    D,
 }
 
 #[derive(Copy, Clone)]
@@ -79,6 +95,29 @@ impl BeatmapState {
             + self.hits50 as f32 * 100.0 / 6.0)
             / divisor as f32
     }
+
+    /// https://osu.ppy.sh/wiki/en/Gameplay/Grade
+    pub fn grade(&self) -> Grade {
+        let accuracy = self.accuracy();
+        let hits = (self.hits300 + self.hits100 + self.hits50 + self.misses) as f64;
+
+        let percentage300s = self.hits300 as f64 / hits;
+        let percentage50s = self.hits50 as f64 / hits;
+
+        if accuracy >= 99.999 {
+            Grade::SS
+        } else if self.misses == 0 && percentage300s > 0.9 && percentage50s <= 0.01 {
+            Grade::S
+        } else if (percentage300s > 0.8 && self.misses == 0) || percentage300s > 0.9 {
+            Grade::A
+        } else if (percentage300s > 0.7 && self.misses == 0) || percentage300s > 0.8 {
+            Grade::B
+        } else if percentage300s > 0.6 {
+            Grade::C
+        } else {
+            Grade::D
+        }
+    }
 }
 
 impl BeatmapData {
@@ -109,10 +148,25 @@ impl BeatmapData {
 impl Beatmap {
     pub fn try_from(osu_file: OsuFile, beatmap_dir: PathBuf) -> Result<Self> {
         let difficulty = osu_file.difficulty.clone().unwrap_or_default();
+        let metadata = osu_file.metadata.clone().unwrap_or_default();
+
         let to_f64 =
             |decimal: Decimal| -> Result<f64, ParseFloatError> { decimal.to_string().parse() };
         let audio_path = audio_path_from(&osu_file, beatmap_dir)
             .with_context(|| "beatmap audio file not found")?;
+
+        let title = metadata
+            .title
+            .map(|title| title.into())
+            .unwrap_or("Not named".to_string());
+        let difficulty_name: String = metadata
+            .version
+            .map(|version| version.into())
+            .unwrap_or("Not named".to_string());
+        let artist: String = metadata
+            .artist
+            .map(|artist| artist.into())
+            .unwrap_or("Not named".to_string());
 
         Ok(Self {
             data: BeatmapData {
@@ -142,9 +196,63 @@ impl Beatmap {
                 )?),
                 hit_objects: HitObject::from(&osu_file)?,
                 audio_path,
+                artist,
+                difficulty_name,
+                title,
             },
             state: Default::default(),
         })
+    }
+
+    pub fn score_text(&self) -> Vec<Text> {
+        let empty = "".color(Color::WHITE);
+        let score_bar = "=========== SCORE ============".color(Color::YELLOW);
+
+        let song = "Song: ".color(Color::DARK_AQUA) + self.data.title.clone().color(Color::WHITE);
+        let artist =
+            "Artist: ".color(Color::DARK_AQUA) + self.data.artist.clone().color(Color::WHITE);
+        let difficulty = "Difficulty: ".color(Color::DARK_AQUA)
+            + self.data.difficulty_name.clone().color(Color::WHITE);
+
+        let hits = "300: ".color(Color::BLUE)
+            + self.state.hits300.to_string().color(Color::WHITE)
+            + "  100: ".color(Color::GREEN)
+            + self.state.hits100.to_string().color(Color::WHITE)
+            + "  50: ".color(Color::YELLOW)
+            + self.state.hits50.to_string().color(Color::WHITE)
+            + "  X: ".color(Color::RED)
+            + self.state.misses.to_string().color(Color::WHITE);
+
+        let stats = "Combo: ".color(Color::LIGHT_PURPLE)
+            + format!("x{}", self.state.max_combo).color(Color::WHITE)
+            + "   Accuracy: ".color(Color::DARK_GREEN)
+            + format!("{:.2}%", self.state.accuracy()).color(Color::WHITE);
+
+        let grade = match self.state.grade() {
+            Grade::SS => "SS".color(Color::GOLD),
+            Grade::S => "S".color(Color::GOLD),
+            Grade::A => "A".color(Color::GREEN),
+            Grade::B => "B".color(Color::BLUE),
+            Grade::C => "C".color(Color::DARK_PURPLE),
+            Grade::D => "D".color(Color::RED),
+        };
+        let score = "Score: ".color(Color::GOLD)
+            + self.state.score.to_string().color(Color::WHITE)
+            + "   Grade: ".color(Color::GOLD)
+            + grade;
+
+        vec![
+            score_bar,
+            empty.clone(),
+            song,
+            artist,
+            difficulty,
+            empty.clone(),
+            score,
+            hits,
+            stats,
+            empty,
+        ]
     }
 }
 

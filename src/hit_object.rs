@@ -1,10 +1,8 @@
-use std::time::Duration;
-
 use anyhow::Result;
 use osu_file_parser::{colours::Colour, OsuFile};
 
 use crate::{
-    beatmap::{ApproachRate, CircleSize},
+    beatmap::CircleSize,
     color::{Color, DEFAULT_COMBO_COLORS},
     hitcircle::HitcircleRadius,
 };

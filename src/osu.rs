@@ -1,11 +1,6 @@
 use anyhow::{Context, Result};
 use osu_file_parser::OsuFile;
-use std::{
-    cmp::max,
-    fs::read_to_string,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{cmp::max, fs::read_to_string, path::PathBuf, time::Duration};
 use tracing::{error, warn};
 
 use valence::{
@@ -37,7 +32,6 @@ const DEFAULT_SPAWN_POS: DVec3 = DVec3::new(
     DEFAULT_SCREEN_SIZE.1 * (1.0 + 2.0 * SCREEN_MARGIN_RATIO) / 2.25,
     -500.0,
 );
-const OSU_DEFAULT_AUDIO_FILE: &str = "audio.mp3";
 
 #[derive(Component)]
 pub struct OsuInstance;
@@ -97,7 +91,11 @@ impl Osu {
         self.init_player_spawn(instance);
     }
 
-    pub fn change_state(&mut self, state_change: OsuStateChange) -> Result<()> {
+    pub fn change_state(
+        &mut self,
+        state_change: OsuStateChange,
+        clients: &mut Query<&mut Client>,
+    ) -> Result<()> {
         self.audio_player.stop();
         match state_change {
             OsuStateChange::SongSelection => {
@@ -127,7 +125,7 @@ impl Osu {
                     .data
                     .hit_objects
                     .first()
-                    .map(|hit_object| max((3000 - hit_object.time()) / time_per_tick, 0))
+                    .map(|hit_object| max((3000 - hit_object.time() as i32) / time_per_tick, 0))
                     .unwrap_or(60) as usize;
 
                 self.state = Some(OsuState::PrePlaying {
@@ -143,9 +141,18 @@ impl Osu {
                 self.state = Some(OsuState::Playing(beatmap));
             }
             OsuStateChange::ScoreDisplay(beatmap) => {
-                warn!("TODO!!!! (set boss bar to display score)");
+                let score_texts = beatmap.score_text();
+                for mut client in clients.iter_mut() {
+                    for text in score_texts.iter() {
+                        client.send_message(text.clone());
+                    }
+                    client.write_packet(&BossBar {
+                        id: self.life_bar_uuid,
+                        action: BossBarAction::Remove,
+                    });
+                }
 
-                self.change_state(OsuStateChange::SongSelection);
+                self.change_state(OsuStateChange::SongSelection, clients)?;
             }
         };
 
@@ -157,16 +164,16 @@ impl Osu {
             Some(OsuState::SongSelection) => {
                 "Sneak <LEFT SHIFT>".color(Color::GOLD)
                     + " to open".color(Color::WHITE)
-                    + " SONG SELECTION".color(Color::BLUE)
+                    + " SONG SELECTION".color(Color::AQUA)
             }
             Some(OsuState::BeatmapSelection) => {
                 "Sneak <LEFT SHIFT>".color(Color::GOLD)
                     + " to open".color(Color::WHITE)
-                    + " BEATMAP SELECTION".color(Color::BLUE)
+                    + " BEATMAP SELECTION".color(Color::AQUA)
             }
             Some(OsuState::PrePlaying { ticks_left, .. }) => {
                 "Beatmap will start in".color(Color::WHITE)
-                    + format!(" {}", ticks_left / tps + 1).color(Color::GREEN)
+                    + format!(" {}", ticks_left / tps + 1).color(Color::AQUA)
                     + " seconds".color(Color::WHITE)
             }
             _ => "".into(),
@@ -527,7 +534,7 @@ pub fn update_osu(
     }
 
     if let Ok(Some(state_change)) = possible_state_change {
-        if let Err(error) = osu.change_state(state_change) {
+        if let Err(error) = osu.change_state(state_change, &mut clients) {
             error!("Error while changing osu state: '{}'", error)
         }
     }

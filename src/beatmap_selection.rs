@@ -187,6 +187,7 @@ pub fn handle_beatmap_selection_clicks(
     mut beatmap_selections: Query<&mut BeatmapSelectionInventory, With<Inventory>>,
     song_selections: Query<Entity, (With<SongSelectionInventory>, With<Inventory>)>,
     open_inventories: Query<&OpenInventory, With<Client>>,
+    mut clients: Query<&mut Client>,
     mut osu: ResMut<Osu>,
     mut inventories_to_open: ResMut<InventoriesToOpen>,
     mut click_events: EventReader<ClickContainer>,
@@ -213,9 +214,12 @@ pub fn handle_beatmap_selection_clicks(
                 commands.entity(click.client).remove::<OpenInventory>();
 
                 // Play map
-                if let Err(error) = osu.change_state(OsuStateChange::PrePlaying {
-                    beatmap_path: selected_beatmap.path.clone(),
-                }) {
+                if let Err(error) = osu.change_state(
+                    OsuStateChange::PrePlaying {
+                        beatmap_path: selected_beatmap.path.clone(),
+                    },
+                    &mut clients,
+                ) {
                     error!(
                         "Error while changing to Playing state while on beatmap selection: '{}'",
                         error

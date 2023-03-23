@@ -17,7 +17,7 @@ use valence::{
 
 use crate::{
     beatmap_selection::BeatmapSelectionInventory,
-    inventory::{open_new_inventory, InventoriesToOpen, InventoryToOpen},
+    inventory::{open_new_inventory, InventoriesToOpen},
     osu::{Osu, OsuStateChange},
 };
 
@@ -224,8 +224,6 @@ pub fn handle_song_selection_clicks(
                 .page_song_paths()
                 .get(click.slot_id.unsigned_abs() as usize)
             {
-                let mut click_client = commands.entity(click.client);
-
                 // Open beatmap selection
                 for (beatmap_selection_entity, mut beatmap_selection) in
                     beatmap_selections.iter_mut().take(1)
@@ -241,10 +239,16 @@ pub fn handle_song_selection_clicks(
                             );
 
                             // Update osu state
-                            if let Err(error) = osu.change_state(OsuStateChange::BeatmapSelection {
-                                beatmap_dir: selected_song.clone(),
-                                beatmaps: beatmaps.iter().map(|b| b.osu_file().clone()).collect(),
-                            }) {
+                            if let Err(error) = osu.change_state(
+                                OsuStateChange::BeatmapSelection {
+                                    beatmap_dir: selected_song.clone(),
+                                    beatmaps: beatmaps
+                                        .iter()
+                                        .map(|b| b.osu_file().clone())
+                                        .collect(),
+                                },
+                                &mut clients,
+                            ) {
                                 error!(
                                     "Error while changing to BeatmapSelection state: '{}'",
                                     error
