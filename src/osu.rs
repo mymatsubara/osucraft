@@ -443,9 +443,6 @@ pub fn update_osu(
                                     HitScore::Miss => beatmap.state.combo = 0,
                                 }
 
-                                dbg!(hit);
-                                dbg!(&beatmap.state);
-
                                 // Play hitsound
                                 play_hit_sound(&mut clicked_client, hit);
 

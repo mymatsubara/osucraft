@@ -4,22 +4,37 @@ use std::{
     path::PathBuf,
 };
 use valence::{
+    client::event::ClickContainer,
     nbt::{compound, List},
-    prelude::{Color, Inventory, InventoryKind},
+    prelude::{Client, Color, Inventory, InventoryKind, OpenInventory},
     protocol::{ItemKind, ItemStack, TextFormat},
 };
 
-use bevy_ecs::{prelude::Component, query::Changed, system::Query};
+use bevy_ecs::{
+    prelude::{Component, Entity, EventReader},
+    query::{Changed, With},
+    system::{Commands, Query, ResMut},
+};
 use osu_file_parser::{Decimal, OsuFile};
+use tracing::error;
 
-use crate::song_selection;
+use crate::{
+    inventory::{open_new_inventory, InventoriesToOpen},
+    osu::{Osu, OsuStateChange},
+    song_selection::{self, SongSelectionInventory},
+};
 
 const SONG_SELECTION_SLOT: u16 = 45;
 const LAST_SLOT: u16 = 53;
 
 #[derive(Component, Default)]
 pub struct BeatmapSelectionInventory {
-    beatmaps: Vec<OsuFile>,
+    beatmaps: Vec<BeatmapFile>,
+}
+
+pub struct BeatmapFile {
+    osu_file: OsuFile,
+    path: PathBuf,
 }
 
 impl BeatmapSelectionInventory {
@@ -33,7 +48,7 @@ impl BeatmapSelectionInventory {
         )
     }
 
-    pub fn load_beatmap_dir(&mut self, dir: &PathBuf) -> Result<&Vec<OsuFile>> {
+    pub fn load_beatmap_dir(&mut self, dir: &PathBuf) -> Result<&Vec<BeatmapFile>> {
         let beatmaps: Vec<_> = read_dir(dir)?
             .flatten()
             .filter_map(|entry| {
@@ -47,7 +62,15 @@ impl BeatmapSelectionInventory {
 
                 None
             })
-            .filter_map(|osu_file_path| read_to_string(osu_file_path).ok()?.parse::<OsuFile>().ok())
+            .filter_map(|osu_file_path| {
+                Some(BeatmapFile {
+                    osu_file: read_to_string(&osu_file_path)
+                        .ok()?
+                        .parse::<OsuFile>()
+                        .ok()?,
+                    path: osu_file_path,
+                })
+            })
             .collect();
 
         if beatmaps.is_empty() {
@@ -59,6 +82,12 @@ impl BeatmapSelectionInventory {
             self.beatmaps = beatmaps;
             Ok(&self.beatmaps)
         }
+    }
+}
+
+impl BeatmapFile {
+    pub fn osu_file(&self) -> &OsuFile {
+        &self.osu_file
     }
 }
 
@@ -76,8 +105,8 @@ pub fn update_beatmap_selection_inventory(
 
         // Set inventories slots
         for (slot, beatmap) in beatmap_selection.beatmaps.iter().enumerate() {
-            let Some(metadata) = beatmap.metadata.clone() else { continue };
-            let Some(difficulty) = beatmap.difficulty.clone() else {continue};
+            let Some(metadata) = beatmap.osu_file.metadata.clone() else { continue };
+            let Some(difficulty) = beatmap.osu_file.difficulty.clone() else {continue};
 
             let title: String = metadata
                 .title
@@ -150,5 +179,49 @@ pub fn update_beatmap_selection_inventory(
             }),
         );
         inventory.replace_slot(SONG_SELECTION_SLOT, Some(item));
+    }
+}
+
+pub fn handle_beatmap_selection_clicks(
+    mut commands: Commands,
+    mut beatmap_selections: Query<&mut BeatmapSelectionInventory, With<Inventory>>,
+    mut song_selections: Query<Entity, (With<SongSelectionInventory>, With<Inventory>)>,
+    open_inventories: Query<&OpenInventory, With<Client>>,
+    mut osu: ResMut<Osu>,
+    mut inventories_to_open: ResMut<InventoriesToOpen>,
+    mut click_events: EventReader<ClickContainer>,
+) {
+    for click in click_events.iter() {
+        // Check if the click occured on a beatmap selection
+        if let Ok(mut beatmap_selection) = open_inventories
+            .get(click.client)
+            .and_then(|open_inventory| beatmap_selections.get_mut(open_inventory.entity()))
+        {
+            let slot = click.slot_id.abs() as u16;
+            // Go back to song selection
+            if slot == SONG_SELECTION_SLOT {
+                for song_selection in song_selections.iter().take(1) {
+                    open_new_inventory(
+                        &mut commands,
+                        click.client,
+                        &mut inventories_to_open,
+                        song_selection,
+                    )
+                }
+            } else if let Some(selected_beatmap) = beatmap_selection.beatmaps.get(slot as usize) {
+                // Close beatmap selection
+                commands.entity(click.client).remove::<OpenInventory>();
+
+                // Play map
+                if let Err(error) = osu.change_state(OsuStateChange::Playing {
+                    beatmap_path: selected_beatmap.path.clone(),
+                }) {
+                    error!(
+                        "Error while changing to Playing state while on beatmap selection: '{}'",
+                        error
+                    );
+                }
+            }
+        }
     }
 }

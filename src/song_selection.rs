@@ -17,7 +17,7 @@ use valence::{
 
 use crate::{
     beatmap_selection::BeatmapSelectionInventory,
-    inventory::{InventoriesToOpen, InventoryToOpen},
+    inventory::{open_new_inventory, InventoriesToOpen, InventoryToOpen},
     osu::{Osu, OsuStateChange},
 };
 
@@ -114,20 +114,6 @@ impl SongSelectionInventory {
             ))
         }
     }
-
-    pub fn refresh(
-        &self,
-        commands: &mut Commands,
-        client: Entity,
-        inventories_to_open: &mut ResMut<InventoriesToOpen>,
-        new_inventory: Entity,
-    ) {
-        commands.entity(client).remove::<OpenInventory>();
-        inventories_to_open.add(InventoryToOpen {
-            client,
-            open_inventory: OpenInventory::new(new_inventory),
-        })
-    }
 }
 
 pub fn update_song_selection_inventory(
@@ -215,7 +201,7 @@ pub fn handle_song_selection_clicks(
             // Clicked next page
             if click.slot_id as u16 == NEXT_PAGE_SLOT && song_selection.has_next_page() {
                 song_selection.go_to_next_page();
-                song_selection.refresh(
+                open_new_inventory(
                     &mut commands,
                     click.client,
                     &mut inventories_to_open,
@@ -227,7 +213,7 @@ pub fn handle_song_selection_clicks(
                 && song_selection.has_previous_page()
             {
                 song_selection.go_to_previous_page();
-                song_selection.refresh(
+                open_new_inventory(
                     &mut commands,
                     click.client,
                     &mut inventories_to_open,
@@ -247,7 +233,7 @@ pub fn handle_song_selection_clicks(
                     match beatmap_selection.load_beatmap_dir(selected_song) {
                         Ok(beatmaps) => {
                             // Open beatmap selection window
-                            song_selection.refresh(
+                            open_new_inventory(
                                 &mut commands,
                                 click.client,
                                 &mut inventories_to_open,
@@ -257,7 +243,7 @@ pub fn handle_song_selection_clicks(
                             // Update osu state
                             if let Err(error) = osu.change_state(OsuStateChange::BeatmapSelection {
                                 beatmap_dir: selected_song.clone(),
-                                beatmaps: beatmaps.clone(),
+                                beatmaps: beatmaps.iter().map(|b| b.osu_file().clone()).collect(),
                             }) {
                                 error!(
                                     "Error while changing to BeatmapSelection state: '{}'",

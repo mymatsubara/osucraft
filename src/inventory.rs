@@ -26,6 +26,19 @@ impl InventoriesToOpen {
     }
 }
 
+pub fn open_new_inventory(
+    commands: &mut Commands,
+    client: Entity,
+    inventories_to_open: &mut ResMut<InventoriesToOpen>,
+    new_inventory: Entity,
+) {
+    commands.entity(client).remove::<OpenInventory>();
+    inventories_to_open.add(InventoryToOpen {
+        client,
+        open_inventory: OpenInventory::new(new_inventory),
+    })
+}
+
 pub fn open_queued_inventories(mut commands: Commands, mut to_open: ResMut<InventoriesToOpen>) {
     let mut inventories_to_open = Vec::new();
     mem::swap(&mut inventories_to_open, &mut to_open.inventories);
