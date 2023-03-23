@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use osu_file_parser::{Decimal, OsuFile};
 use std::{collections::VecDeque, num::ParseFloatError, path::PathBuf, time::Duration};
 
@@ -19,6 +19,7 @@ pub struct BeatmapData {
     pub cs: CircleSize,
     pub hp: HpDrainRate,
     pub hit_objects: Vec<HitObject>,
+    pub audio_path: PathBuf,
 }
 
 #[derive(Clone, Debug)]
@@ -105,13 +106,13 @@ impl BeatmapData {
     }
 }
 
-impl TryFrom<OsuFile> for Beatmap {
-    type Error = anyhow::Error;
-
-    fn try_from(osu_file: OsuFile) -> std::result::Result<Self, Self::Error> {
+impl Beatmap {
+    pub fn try_from(osu_file: OsuFile, beatmap_dir: PathBuf) -> Result<Self> {
         let difficulty = osu_file.difficulty.clone().unwrap_or_default();
         let to_f64 =
             |decimal: Decimal| -> Result<f64, ParseFloatError> { decimal.to_string().parse() };
+        let audio_path = audio_path_from(&osu_file, beatmap_dir)
+            .with_context(|| "beatmap audio file not found")?;
 
         Ok(Self {
             data: BeatmapData {
@@ -140,6 +141,7 @@ impl TryFrom<OsuFile> for Beatmap {
                         .into(),
                 )?),
                 hit_objects: HitObject::from(&osu_file)?,
+                audio_path,
             },
             state: Default::default(),
         })

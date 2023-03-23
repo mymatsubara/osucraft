@@ -185,7 +185,7 @@ pub fn update_beatmap_selection_inventory(
 pub fn handle_beatmap_selection_clicks(
     mut commands: Commands,
     mut beatmap_selections: Query<&mut BeatmapSelectionInventory, With<Inventory>>,
-    mut song_selections: Query<Entity, (With<SongSelectionInventory>, With<Inventory>)>,
+    song_selections: Query<Entity, (With<SongSelectionInventory>, With<Inventory>)>,
     open_inventories: Query<&OpenInventory, With<Client>>,
     mut osu: ResMut<Osu>,
     mut inventories_to_open: ResMut<InventoriesToOpen>,
@@ -193,11 +193,11 @@ pub fn handle_beatmap_selection_clicks(
 ) {
     for click in click_events.iter() {
         // Check if the click occured on a beatmap selection
-        if let Ok(mut beatmap_selection) = open_inventories
+        if let Ok(beatmap_selection) = open_inventories
             .get(click.client)
             .and_then(|open_inventory| beatmap_selections.get_mut(open_inventory.entity()))
         {
-            let slot = click.slot_id.abs() as u16;
+            let slot = click.slot_id.unsigned_abs();
             // Go back to song selection
             if slot == SONG_SELECTION_SLOT {
                 for song_selection in song_selections.iter().take(1) {
@@ -213,7 +213,7 @@ pub fn handle_beatmap_selection_clicks(
                 commands.entity(click.client).remove::<OpenInventory>();
 
                 // Play map
-                if let Err(error) = osu.change_state(OsuStateChange::Playing {
+                if let Err(error) = osu.change_state(OsuStateChange::PrePlaying {
                     beatmap_path: selected_beatmap.path.clone(),
                 }) {
                     error!(

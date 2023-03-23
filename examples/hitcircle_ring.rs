@@ -1,10 +1,7 @@
 use osucraft::audio::AudioPlayer;
-use osucraft::beatmap::{ApproachRate, BeatmapData, CircleSize, HpDrainRate, OverallDifficulty};
-use osucraft::color::Color;
-use osucraft::hitcircle::Hitcircle;
+
 use osucraft::osu::{Osu, OsuInstance};
 use osucraft::plugin::OsuPlugin;
-use rand::Rng;
 use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::{default_event_handler, ClickContainer, StartSneaking};

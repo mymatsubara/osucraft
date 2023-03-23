@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use osu_file_parser::OsuFile;
 use std::{
+    cmp::max,
     fs::read_to_string,
     path::{Path, PathBuf},
     time::Duration,
@@ -61,6 +62,7 @@ pub struct Hitwindow {
 pub enum OsuState {
     SongSelection,
     BeatmapSelection,
+    PrePlaying { ticks_left: usize, beatmap: Beatmap },
     Playing(Beatmap),
     ScoreDisplay,
 }
@@ -71,9 +73,10 @@ pub enum OsuStateChange {
         beatmap_dir: PathBuf,
         beatmaps: Vec<OsuFile>,
     },
-    Playing {
+    PrePlaying {
         beatmap_path: PathBuf,
     },
+    Playing(Beatmap),
     ScoreDisplay(Beatmap),
 }
 
@@ -113,21 +116,31 @@ impl Osu {
 
                 self.state = Some(OsuState::BeatmapSelection);
             }
-            OsuStateChange::Playing { beatmap_path } => {
+            OsuStateChange::PrePlaying { beatmap_path } => {
                 let osu_file = read_to_string(&beatmap_path)?.parse::<OsuFile>()?;
-
                 let beatmap_dir = beatmap_path
                     .parent()
                     .with_context(|| "beatmap path does not contain parent directory")?;
+                let beatmap = Beatmap::try_from(osu_file, beatmap_dir.to_path_buf())?;
+                let time_per_tick = 1000 / 20;
+                let ticks_left = beatmap
+                    .data
+                    .hit_objects
+                    .first()
+                    .map(|hit_object| max((3000 - hit_object.time()) / time_per_tick, 0))
+                    .unwrap_or(60) as usize;
 
-                let audio_path = audio_path_from(&osu_file, beatmap_dir.to_path_buf())
-                    .with_context(|| "beatmap audio file not found")?;
-
+                self.state = Some(OsuState::PrePlaying {
+                    beatmap,
+                    ticks_left,
+                })
+            }
+            OsuStateChange::Playing(beatmap) => {
                 // Start playing music
-                self.audio_player.set_music(audio_path)?;
+                self.audio_player.set_music(&beatmap.data.audio_path)?;
                 self.audio_player.play();
 
-                self.state = Some(OsuState::Playing(Beatmap::try_from(osu_file)?));
+                self.state = Some(OsuState::Playing(beatmap));
             }
             OsuStateChange::ScoreDisplay(beatmap) => {
                 warn!("TODO!!!! (set boss bar to display score)");
@@ -139,7 +152,7 @@ impl Osu {
         Ok(())
     }
 
-    pub fn get_action_bar(&self) -> Text {
+    pub fn get_action_bar(&self, tps: usize) -> Text {
         match self.state {
             Some(OsuState::SongSelection) => {
                 "Sneak <LEFT SHIFT>".color(Color::GOLD)
@@ -150,6 +163,11 @@ impl Osu {
                 "Sneak <LEFT SHIFT>".color(Color::GOLD)
                     + " to open".color(Color::WHITE)
                     + " BEATMAP SELECTION".color(Color::BLUE)
+            }
+            Some(OsuState::PrePlaying { ticks_left, .. }) => {
+                "Beatmap will start in".color(Color::WHITE)
+                    + format!(" {}", ticks_left / tps + 1).color(Color::GREEN)
+                    + " seconds".color(Color::WHITE)
             }
             _ => "".into(),
         }
@@ -270,6 +288,7 @@ pub fn update_osu(
     };
 
     let prev_state = osu.state.clone();
+    let tps = server.shared().tps() as usize;
     let possible_state_change: Result<Option<OsuStateChange>> = match prev_state {
         None => Ok(Some(OsuStateChange::SongSelection)),
         Some(OsuState::SongSelection) => {
@@ -305,6 +324,21 @@ pub fn update_osu(
             Ok(None)
         }
         Some(OsuState::ScoreDisplay) => Ok(None),
+        Some(OsuState::PrePlaying {
+            beatmap,
+            ticks_left,
+        }) => {
+            if ticks_left == 0 {
+                Ok(Some(OsuStateChange::Playing(beatmap)))
+            } else {
+                osu.state = Some(OsuState::PrePlaying {
+                    ticks_left: ticks_left - 1,
+                    beatmap,
+                });
+
+                Ok(None)
+            }
+        }
         Some(OsuState::Playing(mut beatmap)) => {
             // Beatmap has finished
             if beatmap.state.active_hit_objects.is_empty()
@@ -370,7 +404,6 @@ pub fn update_osu(
                         let color = next_hitobject.color();
                         let scale = osu.scale;
                         let combo_number = next_hitobject.combo_number();
-                        let tps = server.shared().tps() as usize;
 
                         let mut osu_instances = instances_set.p0();
                         let osu_instance = osu_instances.get_single_mut().unwrap();
@@ -490,7 +523,7 @@ pub fn update_osu(
     };
 
     for mut client in &mut clients {
-        client.set_action_bar(osu.get_action_bar());
+        client.set_action_bar(osu.get_action_bar(tps));
     }
 
     if let Ok(Some(state_change)) = possible_state_change {
