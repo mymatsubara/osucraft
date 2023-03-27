@@ -74,6 +74,7 @@ pub enum OsuStateChange {
     PrePlaying { beatmap_path: PathBuf },
     Playing(Beatmap),
     ScoreDisplay(Beatmap),
+    Failed,
 }
 
 impl Osu {
@@ -100,6 +101,29 @@ impl Osu {
         clients: &mut Query<&mut Client>,
     ) -> Result<()> {
         self.audio_player.stop();
+        let mut go_to_beatmap_selection = |messages: Vec<Text>| -> Result<()> {
+            for mut client in clients.iter_mut() {
+                for text in messages.iter() {
+                    client.send_message(text.clone());
+                }
+                client.write_packet(&BossBar {
+                    id: self.life_bar_uuid,
+                    action: BossBarAction::Remove,
+                });
+            }
+
+            if let Some(beatmap_selection_data) = self.beatmap_selection_data.take() {
+                self.change_state(
+                    OsuStateChange::BeatmapSelection(beatmap_selection_data),
+                    clients,
+                )?;
+            } else {
+                self.change_state(OsuStateChange::SongSelection, clients)?;
+            }
+
+            Ok(())
+        };
+
         match state_change {
             OsuStateChange::SongSelection => {
                 self.state = Some(OsuState::SongSelection);
@@ -143,24 +167,11 @@ impl Osu {
             }
             OsuStateChange::ScoreDisplay(beatmap) => {
                 let score_texts = beatmap.score_text();
-                for mut client in clients.iter_mut() {
-                    for text in score_texts.iter() {
-                        client.send_message(text.clone());
-                    }
-                    client.write_packet(&BossBar {
-                        id: self.life_bar_uuid,
-                        action: BossBarAction::Remove,
-                    });
-                }
-
-                if let Some(beatmap_selection_data) = self.beatmap_selection_data.take() {
-                    self.change_state(
-                        OsuStateChange::BeatmapSelection(beatmap_selection_data),
-                        clients,
-                    )?;
-                } else {
-                    self.change_state(OsuStateChange::SongSelection, clients)?;
-                }
+                go_to_beatmap_selection(score_texts)?;
+            }
+            OsuStateChange::Failed => {
+                let messages = vec!["Beatmap failed!".color(Color::RED)];
+                go_to_beatmap_selection(messages)?;
             }
         };
 
@@ -364,7 +375,7 @@ pub fn update_osu(
             }
             // Failed beatmap
             else if beatmap.state.health <= 0.0 {
-                Ok(Some(OsuStateChange::SongSelection))
+                Ok(Some(OsuStateChange::Failed))
             }
             // Beatmap is playing
             else {
