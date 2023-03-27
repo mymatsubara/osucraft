@@ -43,6 +43,7 @@ pub struct Osu {
     audio_player: AudioPlayer,
     life_bar_uuid: Uuid,
     state: Option<OsuState>,
+    beatmap_selection_data: Option<BeatmapSelectionData>,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -61,15 +62,16 @@ pub enum OsuState {
     ScoreDisplay,
 }
 
+#[derive(Clone)]
+pub struct BeatmapSelectionData {
+    pub beatmap_dir: PathBuf,
+    pub beatmaps: Vec<OsuFile>,
+}
+
 pub enum OsuStateChange {
     SongSelection,
-    BeatmapSelection {
-        beatmap_dir: PathBuf,
-        beatmaps: Vec<OsuFile>,
-    },
-    PrePlaying {
-        beatmap_path: PathBuf,
-    },
+    BeatmapSelection(BeatmapSelectionData),
+    PrePlaying { beatmap_path: PathBuf },
     Playing(Beatmap),
     ScoreDisplay(Beatmap),
 }
@@ -82,6 +84,7 @@ impl Osu {
             state: None,
             life_bar_uuid: Uuid::new_v4(),
             audio_player,
+            beatmap_selection_data: None,
         }
     }
 
@@ -101,17 +104,15 @@ impl Osu {
             OsuStateChange::SongSelection => {
                 self.state = Some(OsuState::SongSelection);
             }
-            OsuStateChange::BeatmapSelection {
-                beatmap_dir,
-                beatmaps,
-            } => {
-                if let Some(osu_file) = beatmaps.first() {
-                    if let Some(audio_path) = audio_path_from(osu_file, beatmap_dir) {
+            OsuStateChange::BeatmapSelection(data) => {
+                if let Some(osu_file) = data.beatmaps.first() {
+                    if let Some(audio_path) = audio_path_from(osu_file, data.beatmap_dir.clone()) {
                         self.audio_player.set_music(audio_path)?;
                         self.audio_player.play();
                     }
                 }
 
+                self.beatmap_selection_data = Some(data);
                 self.state = Some(OsuState::BeatmapSelection);
             }
             OsuStateChange::PrePlaying { beatmap_path } => {
@@ -152,7 +153,14 @@ impl Osu {
                     });
                 }
 
-                self.change_state(OsuStateChange::SongSelection, clients)?;
+                if let Some(beatmap_selection_data) = self.beatmap_selection_data.take() {
+                    self.change_state(
+                        OsuStateChange::BeatmapSelection(beatmap_selection_data),
+                        clients,
+                    )?;
+                } else {
+                    self.change_state(OsuStateChange::SongSelection, clients)?;
+                }
             }
         };
 
@@ -352,8 +360,6 @@ pub fn update_osu(
                 && beatmap.state.next_hit_object_idx >= beatmap.data.hit_objects.len()
                 && osu.audio_player.has_finished()
             {
-                dbg!(&beatmap.state);
-
                 Ok(Some(OsuStateChange::ScoreDisplay(beatmap)))
             }
             // Failed beatmap

@@ -18,7 +18,7 @@ use valence::{
 use crate::{
     beatmap_selection::BeatmapSelectionInventory,
     inventory::{open_new_inventory, InventoriesToOpen},
-    osu::{Osu, OsuStateChange},
+    osu::{BeatmapSelectionData, Osu, OsuStateChange},
 };
 
 pub const SONG_ITEM_KIND: ItemKind = ItemKind::Jukebox;
@@ -240,13 +240,13 @@ pub fn handle_song_selection_clicks(
 
                             // Update osu state
                             if let Err(error) = osu.change_state(
-                                OsuStateChange::BeatmapSelection {
+                                OsuStateChange::BeatmapSelection(BeatmapSelectionData {
                                     beatmap_dir: selected_song.clone(),
                                     beatmaps: beatmaps
                                         .iter()
                                         .map(|b| b.osu_file().clone())
                                         .collect(),
-                                },
+                                }),
                                 &mut clients,
                             ) {
                                 error!(
