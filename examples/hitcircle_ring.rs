@@ -1,7 +1,10 @@
+use std::f64::consts::TAU;
+
 use osucraft::audio::AudioPlayer;
 
 use osucraft::osu::{Osu, OsuInstance};
 use osucraft::plugin::OsuPlugin;
+use osucraft::slider::Slider;
 use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::{default_event_handler, ClickContainer, StartSneaking};
@@ -25,7 +28,7 @@ pub fn main() {
         .add_system(despawn_disconnected_clients)
         .add_system(reposition_clients)
         .insert_resource(Osu::new(0.3, audio_player))
-        // .add_system(test)
+        .add_system(test)
         .run();
 }
 
@@ -63,12 +66,26 @@ fn reposition_clients(osu: Res<Osu>, mut clients: Query<&mut Client>) {
     }
 }
 
-fn test(
-    mut commands: Commands,
-    mut osu: ResMut<Osu>,
-    mut clients: Query<&mut Client>,
-    mut events: EventReader<ClickContainer>,
-    mut sneaking_events: EventReader<StartSneaking>,
-    mut inventories: Query<(&mut Inventory, Entity), Without<Client>>,
-) {
+fn test(mut commands: Commands, instances: Query<Entity, With<Instance>>, sliders: Query<&Slider>) {
+    if let Ok(instance) = instances.get_single() {
+        let sliders_count = 10;
+
+        if sliders.iter().count() != sliders_count {
+            let delta_angle = TAU / sliders_count as f64;
+            let length = 100.0;
+
+            for i in 0..sliders_count {
+                let start = DVec3::new(200.0, 200.0, 0.0);
+                let angle = i as f64 * delta_angle;
+                let end = start + DVec3::new(length * angle.cos(), length * angle.sin(), 0.0);
+                let radius = 15.0;
+
+                let slider = Slider::new(start, end, radius, instance, &mut commands).unwrap();
+
+                commands.spawn(slider);
+            }
+        }
+
+        if sliders.get_single().is_err() {}
+    }
 }

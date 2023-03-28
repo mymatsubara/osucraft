@@ -85,7 +85,9 @@ impl Ring {
                     yaw: 0.0,
                     roll,
                 };
-                create_rotated_item(item, rotation, pos, instance)
+                let (mc_entity, equipment) = create_rotated_item(item, rotation, pos, instance);
+
+                (mc_entity, equipment, RingPart)
             })
             .map(|bundle| commands.spawn(bundle).id())
             .collect();
@@ -175,12 +177,12 @@ impl Ring {
 }
 
 /// Creates an invisible `ArmorStand` entity equiped with the `item` on the head
-fn create_rotated_item(
+pub fn create_rotated_item(
     item: ItemKind,
     rotation: EulerAngle,
     position: impl Into<DVec3>,
     instance: Entity,
-) -> (McEntity, Equipment, RingPart) {
+) -> (McEntity, Equipment) {
     // Equipment
     let mut equipment = Equipment::new();
     let item = ItemStack::new(item, 1, None);
@@ -197,7 +199,7 @@ fn create_rotated_item(
     let position = rotated_item_to_armor_stand_position(position, rotation);
     armor_stand.set_position(position);
 
-    (armor_stand, equipment, RingPart {})
+    (armor_stand, equipment)
 }
 
 const ARMOR_STAND_OFFSET: DVec3 = DVec3::new(0.5, -2.2, 0.5);
