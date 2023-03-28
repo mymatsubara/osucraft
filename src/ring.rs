@@ -8,16 +8,22 @@ use bevy_ecs::{
 };
 use valence::{
     equipment::{Equipment, EquipmentSlot},
-    prelude::{DVec3, EntityKind, McEntity, TrackedData},
+    math::from_yaw_and_pitch,
+    prelude::{Client, DVec3, EntityKind, McEntity, TrackedData},
     protocol::{entity_meta::EulerAngle, ItemKind, ItemStack},
     Despawned,
 };
 
+use crate::minecraft::PLAYER_EYE_OFFSET;
+
+/// Ring in the XY plane
 #[derive(Component)]
 pub struct Ring {
     armor_stands: Vec<Entity>,
     speed: f64,
     ticks: usize,
+    center: DVec3,
+    radius: f64,
 }
 
 #[derive(Component)]
@@ -85,9 +91,11 @@ impl Ring {
             .collect();
 
         let ring = Self {
+            center,
             armor_stands,
             ticks,
             speed,
+            radius,
         };
 
         Ok(ring)
@@ -113,10 +121,12 @@ impl Ring {
                     entity.set_position(new_pos);
                 }
             });
+
+        self.radius -= self.speed;
     }
 
     pub fn translate(
-        &self,
+        &mut self,
         movement: DVec3,
         ring_entities: &mut Query<&mut McEntity, With<RingPart>>,
     ) {
@@ -126,6 +136,33 @@ impl Ring {
                 armor_stand.set_position(new_pos);
             }
         });
+
+        self.center += movement;
+    }
+
+    pub fn raycast_client(&self, client: &Client) -> Option<DVec3> {
+        let origin = client.position() + PLAYER_EYE_OFFSET;
+        let direction = from_yaw_and_pitch(client.yaw(), client.pitch());
+        let direction = DVec3::new(direction.x as f64, direction.y as f64, direction.z as f64);
+
+        self.raycast(origin, direction)
+    }
+
+    pub fn raycast(&self, origin: DVec3, direction: DVec3) -> Option<DVec3> {
+        if direction.z == 0.0 {
+            return None;
+        }
+
+        let direction_scale = (self.center.z - origin.z) / direction.z;
+        if direction_scale < 0.0 {
+            // Direction not pointing to hitcircle plane
+            return None;
+        }
+
+        let intersection = origin + direction * direction_scale;
+        let dist = self.center.distance(intersection);
+
+        (dist <= self.radius).then_some(intersection)
     }
 
     pub fn despawn(&self, commands: &mut Commands) {

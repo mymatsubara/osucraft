@@ -467,7 +467,7 @@ pub fn update_osu(
                     };
 
                         if let Ok(hitcircle) = hitcircles.get(hitcircle_entity) {
-                            if let Some(hit) = hitcircle.hit_score(&clicked_client) {
+                            if let Some(hit) = hitcircle.hit_score(&clicked_client, &rings) {
                                 // Update score (https://osu.ppy.sh/wiki/en/Gameplay/Score/ScoreV1/osu%21#hit-circles)
                                 let combo = beatmap.state.combo;
                                 let combo_multiplier = if combo == 0 { 0 } else { combo - 1 };

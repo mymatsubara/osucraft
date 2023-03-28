@@ -1,6 +1,6 @@
 use anyhow::Result;
 use tracing::warn;
-use valence::{math::from_yaw_and_pitch, prelude::*, Despawned};
+use valence::{prelude::*, Despawned};
 
 use std::cmp::max;
 
@@ -9,7 +9,7 @@ use crate::{
     color::Color,
     digit::{DigitWriter, TextPosition},
     hit_score::{HitScore, HitScoreNumber},
-    minecraft::{to_ticks, PLAYER_EYE_OFFSET},
+    minecraft::to_ticks,
     osu::Hitwindow,
     ring::Ring,
 };
@@ -145,35 +145,12 @@ impl Hitcircle {
         )
     }
 
-    pub fn hit_score(&self, client: &Client) -> Option<HitScore> {
-        self.raycast_client(client)
-            .is_some()
-            .then_some(self.hitwindow.hit_score(self.ticks as u32))
-    }
-
-    pub fn raycast_client(&self, client: &Client) -> Option<DVec3> {
-        let origin = client.position() + PLAYER_EYE_OFFSET;
-        let direction = from_yaw_and_pitch(client.yaw(), client.pitch());
-        let direction = DVec3::new(direction.x as f64, direction.y as f64, direction.z as f64);
-
-        self.raycast(origin, direction)
-    }
-
-    pub fn raycast(&self, origin: DVec3, direction: DVec3) -> Option<DVec3> {
-        if direction.z == 0.0 {
-            return None;
-        }
-
-        let direction_scale = (self.center.z - origin.z) / direction.z;
-        if direction_scale < 0.0 {
-            // Direction not pointing to hitcircle plane
-            return None;
-        }
-
-        let intersection = origin + direction * direction_scale;
-        let dist = self.center.distance(intersection);
-
-        (dist <= self.radius).then_some(intersection)
+    pub fn hit_score(&self, client: &Client, rings: &Query<&Ring>) -> Option<HitScore> {
+        rings.get(self.circle_ring).ok().and_then(|ring| {
+            ring.raycast_client(client)
+                .is_some()
+                .then_some(self.hitwindow.hit_score(self.ticks as u32))
+        })
     }
 
     pub fn despawn(
