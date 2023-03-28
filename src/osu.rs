@@ -181,12 +181,12 @@ impl Osu {
     pub fn get_action_bar(&self, tps: usize) -> Text {
         match self.state {
             Some(OsuState::SongSelection) => {
-                "Sneak <LEFT SHIFT>".color(Color::GOLD)
+                "Sneak<LEFT SHIFT>".color(Color::GOLD)
                     + " to open".color(Color::WHITE)
                     + " SONG SELECTION".color(Color::AQUA)
             }
             Some(OsuState::BeatmapSelection) => {
-                "Sneak <LEFT SHIFT>".color(Color::GOLD)
+                "Sneak<LEFT SHIFT>".color(Color::GOLD)
                     + " to open".color(Color::WHITE)
                     + " BEATMAP SELECTION".color(Color::AQUA)
             }

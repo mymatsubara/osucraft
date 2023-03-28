@@ -207,7 +207,16 @@ pub fn handle_beatmap_selection_clicks(
                         click.client,
                         &mut inventories_to_open,
                         song_selection,
-                    )
+                    );
+
+                    if let Err(error) =
+                        osu.change_state(OsuStateChange::SongSelection, &mut clients)
+                    {
+                        error!(
+                            "Error while changing to Song Selection state while on beatmap selection: '{}'",
+                            error
+                        );
+                    }
                 }
             } else if let Some(selected_beatmap) = beatmap_selection.beatmaps.get(slot as usize) {
                 // Close beatmap selection

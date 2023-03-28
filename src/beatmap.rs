@@ -206,7 +206,7 @@ impl Beatmap {
 
     pub fn score_text(&self) -> Vec<Text> {
         let empty = "".color(Color::WHITE);
-        let score_bar = "=========== SCORE ============".color(Color::YELLOW);
+        let score_bar = "=========== SCORE ============".color(Color::GOLD);
 
         let song = "Song: ".color(Color::DARK_AQUA) + self.data.title.clone().color(Color::WHITE);
         let artist =
@@ -218,7 +218,7 @@ impl Beatmap {
             + self.state.hits300.to_string().color(Color::WHITE)
             + "  100: ".color(Color::GREEN)
             + self.state.hits100.to_string().color(Color::WHITE)
-            + "  50: ".color(Color::YELLOW)
+            + "  50: ".color(Color::GOLD)
             + self.state.hits50.to_string().color(Color::WHITE)
             + "  X: ".color(Color::RED)
             + self.state.misses.to_string().color(Color::WHITE);
@@ -229,8 +229,8 @@ impl Beatmap {
             + format!("{:.2}%", self.state.accuracy()).color(Color::WHITE);
 
         let grade = match self.state.grade() {
-            Grade::SS => "SS".color(Color::GOLD),
-            Grade::S => "S".color(Color::GOLD),
+            Grade::SS => "SS".color(Color::YELLOW),
+            Grade::S => "S".color(Color::YELLOW),
             Grade::A => "A".color(Color::GREEN),
             Grade::B => "B".color(Color::BLUE),
             Grade::C => "C".color(Color::DARK_PURPLE),
