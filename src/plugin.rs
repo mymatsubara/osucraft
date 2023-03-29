@@ -7,7 +7,7 @@ use crate::{
     hit_score::update_score_hit_numbers,
     hitcircle::update_hitcircle,
     inventory::{open_queued_inventories, InventoriesToOpen},
-    osu::update_osu,
+    osu::{send_welcome_message, update_osu},
     ring::update_rings,
     song_selection::{handle_song_selection_clicks, update_song_selection_inventory},
 };
@@ -29,7 +29,8 @@ impl Plugin for OsuPlugin {
                 .with_system(update_beatmap_selection_inventory)
                 .with_system(handle_beatmap_selection_clicks)
                 .with_system(register_mc_commands)
-                .with_system(execute_commands),
+                .with_system(execute_commands)
+                .with_system(send_welcome_message),
         )
         .init_resource::<InventoriesToOpen>();
     }

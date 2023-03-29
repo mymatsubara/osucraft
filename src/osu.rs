@@ -557,6 +557,45 @@ pub fn update_osu(
     }
 }
 
+pub fn send_welcome_message(mut new_clients: Query<&mut Client, Added<Client>>) {
+    for mut client in &mut new_clients {
+        let title = "Welcome to".color(Color::AQUA) + " osucraft!".color(Color::GOLD);
+        let instructions = "To hit a circle press one of the following:".color(Color::BLUE);
+        let left_click = " - ".color(Color::RED)
+            + "Attack".color(Color::LIGHT_PURPLE)
+            + " <LEFT CLICK>".color(Color::GOLD);
+        let drop_item = " - ".color(Color::RED)
+            + "Drop selected item".color(Color::LIGHT_PURPLE)
+            + " <Q>".color(Color::GOLD);
+        let swap_item = " - ".color(Color::RED)
+            + "Swap item with offhand ".color(Color::LIGHT_PURPLE)
+            + " <F>".color(Color::GOLD);
+        let empty: Text = "".into();
+        let commands = "Commands: ".color(Color::YELLOW);
+        let filter_songs = " - ".color(Color::RED)
+            + "/filter-songs".color(Color::YELLOW)
+            + " <keywords>".color(Color::GRAY);
+        let reset_filter = " - ".color(Color::RED) + "/reset-filter".color(Color::YELLOW);
+
+        let messages = [
+            title,
+            empty.clone(),
+            instructions,
+            left_click,
+            drop_item,
+            swap_item,
+            empty,
+            commands,
+            filter_songs,
+            reset_filter,
+        ];
+
+        for message in messages.into_iter() {
+            client.send_message(message);
+        }
+    }
+}
+
 fn play_hit_sound(client: &mut Mut<Client>, hit: HitScore) {
     let (sound, category) = if matches!(hit, HitScore::Miss) {
         (Sound::EntityChickenHurt, SoundCategory::Block)
