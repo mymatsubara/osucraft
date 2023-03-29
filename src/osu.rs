@@ -178,8 +178,8 @@ impl Osu {
         Ok(())
     }
 
-    pub fn get_action_bar(&self, tps: usize) -> Text {
-        match self.state {
+    pub fn get_boss_bar_title(&self, tps: usize) -> Text {
+        match &self.state {
             Some(OsuState::SongSelection) => {
                 "Sneak<LEFT SHIFT>".color(Color::GOLD)
                     + " to open".color(Color::WHITE)
@@ -194,6 +194,14 @@ impl Osu {
                 "Beatmap will start in".color(Color::WHITE)
                     + format!(" {}", ticks_left / tps + 1).color(Color::AQUA)
                     + " seconds".color(Color::WHITE)
+            }
+            Some(OsuState::Playing(beatmap)) => {
+                "Score: ".color(Color::GOLD)
+                    + beatmap.state.score.to_string().color(Color::WHITE)
+                    + "   Combo: ".color(Color::LIGHT_PURPLE)
+                    + format!("x{}", beatmap.state.combo).color(Color::WHITE)
+                    + "   Acc: ".color(Color::GREEN)
+                    + format!("{:.2}%", beatmap.state.accuracy()).color(Color::WHITE)
             }
             _ => "".into(),
         }
@@ -315,6 +323,8 @@ pub fn update_osu(
 
     let prev_state = osu.state.clone();
     let tps = server.shared().tps() as usize;
+    let mut health = 1.0;
+
     let possible_state_change: Result<Option<OsuStateChange>> = match prev_state {
         None => Ok(Some(OsuStateChange::SongSelection)),
         Some(OsuState::SongSelection) => {
@@ -519,27 +529,7 @@ pub fn update_osu(
                     }
                 }
 
-                // Update health bar
-                for mut client in &mut clients {
-                    let text = "Score: ".color(Color::GOLD)
-                        + beatmap.state.score.to_string().color(Color::WHITE)
-                        + "   Combo: ".color(Color::LIGHT_PURPLE)
-                        + format!("x{}", beatmap.state.combo).color(Color::WHITE)
-                        + "   Acc: ".color(Color::GREEN)
-                        + format!("{:.2}%", beatmap.state.accuracy()).color(Color::WHITE);
-
-                    client.write_packet(&BossBar {
-                        id: osu.life_bar_uuid,
-                        action: BossBarAction::Add {
-                            title: text,
-                            health: beatmap.state.health as f32,
-                            color: BossBarColor::Blue,
-                            division: BossBarDivision::TwentyNotches,
-                            flags: BossBarFlags::new(),
-                        },
-                    });
-                }
-
+                health = beatmap.state.health as f32;
                 osu.state = Some(OsuState::Playing(beatmap));
                 Ok(None)
             }
@@ -547,7 +537,16 @@ pub fn update_osu(
     };
 
     for mut client in &mut clients {
-        client.set_action_bar(osu.get_action_bar(tps));
+        client.write_packet(&BossBar {
+            id: osu.life_bar_uuid,
+            action: BossBarAction::Add {
+                title: osu.get_boss_bar_title(tps),
+                health,
+                color: BossBarColor::Blue,
+                division: BossBarDivision::TwentyNotches,
+                flags: BossBarFlags::new(),
+            },
+        });
     }
 
     if let Ok(Some(state_change)) = possible_state_change {
