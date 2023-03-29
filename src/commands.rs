@@ -1,7 +1,12 @@
-use bevy_ecs::{prelude::EventReader, query::Added, system::Query};
+use anyhow::anyhow;
+use bevy_ecs::{
+    prelude::EventReader,
+    query::{Added, With},
+    system::Query,
+};
 use valence::{
     client::event::ChatCommand,
-    prelude::{Client, Color},
+    prelude::{Client, Color, Inventory},
     protocol::{
         packets::s2c::{
             commands::{Node, NodeData, Parser, StringArg},
@@ -10,6 +15,8 @@ use valence::{
         TextFormat, VarInt,
     },
 };
+
+use crate::song_selection::SongSelectionInventory;
 
 pub fn register_mc_commands(mut new_clients: Query<&mut Client, Added<Client>>) {
     for mut client in &mut new_clients {
@@ -24,7 +31,7 @@ pub fn register_mc_commands(mut new_clients: Query<&mut Client, Added<Client>>) 
                 Node {
                     children: vec![VarInt(2)],
                     data: NodeData::Literal {
-                        name: "search-song",
+                        name: "filter-songs",
                     },
                     executable: true,
                     redirect_node: None,
@@ -32,7 +39,7 @@ pub fn register_mc_commands(mut new_clients: Query<&mut Client, Added<Client>>) 
                 Node {
                     children: vec![],
                     data: NodeData::Argument {
-                        name: "song name",
+                        name: "keyword",
                         parser: Parser::String(StringArg::GreedyPhrase),
                         suggestion: None,
                     },
@@ -42,7 +49,7 @@ pub fn register_mc_commands(mut new_clients: Query<&mut Client, Added<Client>>) 
                 Node {
                     children: vec![],
                     data: NodeData::Literal {
-                        name: "reset-search",
+                        name: "reset-filter",
                     },
                     executable: true,
                     redirect_node: None,
@@ -56,31 +63,40 @@ pub fn register_mc_commands(mut new_clients: Query<&mut Client, Added<Client>>) 
 pub fn execute_commands(
     mut clients: Query<&mut Client>,
     mut command_events: EventReader<ChatCommand>,
+    mut song_selections: Query<&mut SongSelectionInventory, With<Inventory>>,
 ) {
     for command_event in command_events.iter() {
         let match_client = clients.get_mut(command_event.client);
 
-        match command_event
+        let result = match command_event
             .command
             .split_once(' ')
             .map(|(command_name, args)| (command_name, args.replace('"', "")))
             .unwrap_or((command_event.command.as_ref(), String::new()))
         {
-            ("search-song", song_name) => {
-                dbg!(song_name);
-                if let Ok(mut client) = match_client {
-                    client.send_message("Not implemented yet".color(Color::RED));
+            ("filter-songs", song_name) => {
+                if let Ok(mut song_selection) = song_selections.get_single_mut() {
+                    song_selection.set_search_string(Some(song_name.as_str()))
+                } else {
+                    Err(anyhow!("Song selection not found"))
                 }
             }
-            ("reset-search", _) => {
-                if let Ok(mut client) = match_client {
-                    client.send_message("Not implmented yet".color(Color::RED));
+            ("reset-filter", _) => {
+                if let Ok(mut song_selection) = song_selections.get_single_mut() {
+                    song_selection.set_search_string(None)
+                } else {
+                    Err(anyhow!("Song selection not found"))
                 }
             }
-            _ => {
-                if let Ok(mut client) = match_client {
-                    client.send_message("Unknown command".color(Color::RED))
-                }
+            (command_name, _) => Err(anyhow!("Unknown command: '{}'", command_name)),
+        };
+
+        if let Err(error) = result {
+            if let Ok(mut client) = match_client {
+                client.send_message(
+                    format!("Error occurred while executing the command: '{}'", error)
+                        .color(Color::RED),
+                );
             }
         }
     }

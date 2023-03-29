@@ -1,6 +1,11 @@
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
-use std::{cmp::min, fs::read_dir, path::PathBuf};
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use std::{
+    cmp::{min, Reverse},
+    fs::read_dir,
+    path::PathBuf,
+};
 
 use bevy_ecs::{
     prelude::{Component, Entity, EventReader},
@@ -31,6 +36,7 @@ const PAGE_SIZE: usize = 36;
 pub struct SongSelectionInventory {
     cur_page: usize,
     songs: Vec<PathBuf>,
+    filter: Option<String>,
 }
 
 struct Song {
@@ -40,13 +46,13 @@ struct Song {
 
 impl SongSelectionInventory {
     pub fn new() -> Result<(Self, Inventory)> {
-        let inventory =
-            Inventory::with_title(InventoryKind::Generic9x6, "Songs".color(Color::DARK_BLUE));
+        let inventory = Inventory::new(InventoryKind::Generic9x6);
 
         Ok((
             Self {
                 cur_page: 0,
-                songs: Self::get_beatmaps()?,
+                songs: Self::get_all_songs()?,
+                filter: None,
             },
             inventory,
         ))
@@ -58,6 +64,14 @@ impl SongSelectionInventory {
 
     pub fn go_to_previous_page(&mut self) {
         self.cur_page -= 1;
+    }
+
+    pub fn set_search_string(&mut self, search_string: Option<&str>) -> Result<()> {
+        self.songs = Self::filter_songs(Self::get_all_songs()?, search_string);
+        self.filter = search_string.map(|s| s.to_string());
+        self.cur_page = 0;
+
+        Ok(())
     }
 
     fn page_songs(&self) -> Vec<Song> {
@@ -93,15 +107,41 @@ impl SongSelectionInventory {
         (self.songs.len() - 1) / PAGE_SIZE
     }
 
-    fn get_beatmaps() -> Result<Vec<PathBuf>> {
-        Ok(read_dir(Self::get_beatmaps_dir()?)?
+    fn get_all_songs() -> Result<Vec<PathBuf>> {
+        Ok(read_dir(Self::get_songs_dir()?)?
             .filter_map(|result| result.ok())
             .map(|entry| entry.path())
             .filter(|entry| entry.is_dir() && entry.file_name().is_some())
             .collect::<Vec<_>>())
     }
 
-    fn get_beatmaps_dir() -> Result<PathBuf> {
+    fn filter_songs(songs: Vec<PathBuf>, filter: Option<&str>) -> Vec<PathBuf> {
+        match filter {
+            Some(search_string) => {
+                let matcher = SkimMatcherV2::default().ignore_case();
+
+                let mut filtered_songs: Vec<_> = songs
+                    .into_iter()
+                    .filter_map(|song_path| {
+                        Some((song_path.file_name()?.to_str()?.to_string(), song_path))
+                    })
+                    .filter_map(|(song_name, song_path)| {
+                        Some((matcher.fuzzy_match(&song_name, search_string)?, song_path))
+                    })
+                    .collect();
+
+                filtered_songs.sort_by_key(|(fuzzy_score, _)| Reverse(*fuzzy_score));
+
+                filtered_songs
+                    .into_iter()
+                    .map(|(_, song_path)| song_path)
+                    .collect()
+            }
+            None => songs,
+        }
+    }
+
+    fn get_songs_dir() -> Result<PathBuf> {
         let base_dirs = BaseDirs::new().ok_or(anyhow!("No home directory found in the system"))?;
         let beatmaps_dir = base_dirs.data_local_dir().join("osu!").join("Songs");
 
@@ -132,6 +172,18 @@ pub fn update_song_selection_inventory(
         for slot in 0_u16..=NEXT_PAGE_SLOT {
             inventory.replace_slot(slot, None);
         }
+
+        let title = "Songs".color(Color::DARK_BLUE);
+        let title = if let Some(filter) = &song_selection.filter {
+            title
+                + " (filter: '".color(Color::DARK_GRAY)
+                + filter.clone().color(Color::DARK_PURPLE)
+                + "')".color(Color::DARK_GRAY)
+        } else {
+            title
+        };
+
+        inventory.replace_title(title);
 
         // Populate page with songs
         for (slot, song) in song_selection.page_songs().iter().enumerate() {
@@ -268,5 +320,24 @@ pub fn handle_song_selection_clicks(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn filter_beatmaps() {
+        let first_beatmap = PathBuf::from("C:/test/123 - abc test");
+        let second_beatmap = PathBuf::from("C:/test/543 - chamblers pipoquinha batatinha");
+
+        let beatmaps = vec![first_beatmap, second_beatmap.clone()];
+
+        let filtered_beatmaps = SongSelectionInventory::filter_songs(beatmaps.clone(), None);
+        assert_eq!(filtered_beatmaps, beatmaps);
+
+        let filtered_beatmaps = SongSelectionInventory::filter_songs(beatmaps, Some("BaTaT"));
+        assert_eq!(filtered_beatmaps, vec![second_beatmap]);
     }
 }
