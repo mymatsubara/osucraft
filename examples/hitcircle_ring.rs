@@ -4,7 +4,7 @@ use osucraft::osu::{Osu, OsuInstance};
 use osucraft::plugin::OsuPlugin;
 use rodio::OutputStream;
 use valence::client::despawn_disconnected_clients;
-use valence::client::event::{default_event_handler, ClickContainer, StartSneaking};
+use valence::client::event::{default_event_handler, ChatCommand, CommandSuggestionsRequest};
 use valence::prelude::*;
 
 #[derive(Component)]
@@ -64,11 +64,7 @@ fn reposition_clients(osu: Res<Osu>, mut clients: Query<&mut Client>) {
 }
 
 fn test(
-    mut commands: Commands,
-    mut osu: ResMut<Osu>,
-    mut clients: Query<&mut Client>,
-    mut events: EventReader<ClickContainer>,
-    mut sneaking_events: EventReader<StartSneaking>,
-    mut inventories: Query<(&mut Inventory, Entity), Without<Client>>,
+    mut command_events: EventReader<ChatCommand>,
+    mut command_suggestion_events: EventReader<CommandSuggestionsRequest>,
 ) {
 }

@@ -3,6 +3,7 @@ use valence::bevy_app::Plugin;
 
 use crate::{
     beatmap_selection::{handle_beatmap_selection_clicks, update_beatmap_selection_inventory},
+    commands::{execute_commands, register_mc_commands},
     hit_score::update_score_hit_numbers,
     hitcircle::update_hitcircle,
     inventory::{open_queued_inventories, InventoriesToOpen},
@@ -26,7 +27,9 @@ impl Plugin for OsuPlugin {
                 .with_system(update_song_selection_inventory)
                 .with_system(handle_song_selection_clicks.after(open_queued_inventories))
                 .with_system(update_beatmap_selection_inventory)
-                .with_system(handle_beatmap_selection_clicks),
+                .with_system(handle_beatmap_selection_clicks)
+                .with_system(register_mc_commands)
+                .with_system(execute_commands),
         )
         .init_resource::<InventoriesToOpen>();
     }
