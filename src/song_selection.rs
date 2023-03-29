@@ -36,7 +36,7 @@ const PAGE_SIZE: usize = 36;
 pub struct SongSelectionInventory {
     cur_page: usize,
     songs: Vec<PathBuf>,
-    filter: Option<String>,
+    keywords: Option<String>,
 }
 
 struct Song {
@@ -52,7 +52,7 @@ impl SongSelectionInventory {
             Self {
                 cur_page: 0,
                 songs: Self::get_all_songs()?,
-                filter: None,
+                keywords: None,
             },
             inventory,
         ))
@@ -66,9 +66,9 @@ impl SongSelectionInventory {
         self.cur_page -= 1;
     }
 
-    pub fn set_search_string(&mut self, search_string: Option<&str>) -> Result<()> {
-        self.songs = Self::filter_songs(Self::get_all_songs()?, search_string);
-        self.filter = search_string.map(|s| s.to_string());
+    pub fn set_filter(&mut self, keywords: Option<&str>) -> Result<()> {
+        self.songs = Self::filter_songs(Self::get_all_songs()?, keywords);
+        self.keywords = keywords.map(|s| s.to_string());
         self.cur_page = 0;
 
         Ok(())
@@ -174,7 +174,7 @@ pub fn update_song_selection_inventory(
         }
 
         let title = "Songs".color(Color::DARK_BLUE);
-        let title = if let Some(filter) = &song_selection.filter {
+        let title = if let Some(filter) = &song_selection.keywords {
             title
                 + " (filter: '".color(Color::DARK_GRAY)
                 + filter.clone().color(Color::DARK_PURPLE)

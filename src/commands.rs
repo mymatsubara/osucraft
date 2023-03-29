@@ -39,7 +39,7 @@ pub fn register_mc_commands(mut new_clients: Query<&mut Client, Added<Client>>) 
                 Node {
                     children: vec![],
                     data: NodeData::Argument {
-                        name: "keyword",
+                        name: "keywords",
                         parser: Parser::String(StringArg::GreedyPhrase),
                         suggestion: None,
                     },
@@ -74,16 +74,21 @@ pub fn execute_commands(
             .map(|(command_name, args)| (command_name, args.replace('"', "")))
             .unwrap_or((command_event.command.as_ref(), String::new()))
         {
-            ("filter-songs", song_name) => {
+            ("filter-songs", keywords) => {
                 if let Ok(mut song_selection) = song_selections.get_single_mut() {
-                    song_selection.set_search_string(Some(song_name.as_str()))
+                    song_selection.set_filter(Some(keywords.as_str())).map(|_| {
+                        "Songs selection filtered by the keywords: ".color(Color::YELLOW)
+                            + format!("'{}'", keywords).color(Color::GREEN)
+                    })
                 } else {
                     Err(anyhow!("Song selection not found"))
                 }
             }
             ("reset-filter", _) => {
                 if let Ok(mut song_selection) = song_selections.get_single_mut() {
-                    song_selection.set_search_string(None)
+                    song_selection.set_filter(None).map(|_| {
+                        "Song filter reset ".color(Color::YELLOW) + "succefully".color(Color::GREEN)
+                    })
                 } else {
                     Err(anyhow!("Song selection not found"))
                 }
@@ -91,13 +96,18 @@ pub fn execute_commands(
             (command_name, _) => Err(anyhow!("Unknown command: '{}'", command_name)),
         };
 
-        if let Err(error) = result {
-            if let Ok(mut client) = match_client {
+        // Send command result to client
+        match (result, match_client) {
+            (Ok(message), Ok(mut client)) => {
+                client.send_message(message);
+            }
+            (Err(error), Ok(mut client)) => {
                 client.send_message(
                     format!("Error occurred while executing the command: '{}'", error)
                         .color(Color::RED),
                 );
             }
+            _ => (),
         }
     }
 }
