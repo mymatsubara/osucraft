@@ -151,10 +151,10 @@ impl From<osu_file_parser::hitobjects::HitObjectParams> for HitObjectParams {
         match hitobject {
             osu_file_parser::hitobjects::HitObjectParams::HitCircle => HitObjectParams::Hitcircle,
             osu_file_parser::hitobjects::HitObjectParams::Slider(_) => HitObjectParams::Slider,
-            osu_file_parser::hitobjects::HitObjectParams::Spinner { end_time } => {
+            osu_file_parser::hitobjects::HitObjectParams::Spinner { .. } => {
                 HitObjectParams::Spinner
             }
-            osu_file_parser::hitobjects::HitObjectParams::OsuManiaHold { end_time } => {
+            osu_file_parser::hitobjects::HitObjectParams::OsuManiaHold { .. } => {
                 HitObjectParams::OsuManiaHold
             }
             _ => panic!("unexpected hitobject from osu file"),
