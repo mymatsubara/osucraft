@@ -3,6 +3,7 @@ use osucraft::audio::AudioPlayer;
 use osucraft::osu::{Osu, OsuInstance};
 use osucraft::plugin::OsuPlugin;
 use rodio::OutputStream;
+use tracing::Level;
 use valence::client::despawn_disconnected_clients;
 use valence::client::event::default_event_handler;
 use valence::prelude::*;
@@ -11,7 +12,13 @@ use valence::prelude::*;
 struct Test;
 
 pub fn main() {
-    tracing_subscriber::fmt().init();
+    let log_level = if cfg!(debug_assertions) {
+        Level::DEBUG
+    } else {
+        Level::WARN
+    };
+
+    tracing_subscriber::fmt().with_max_level(log_level).init();
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let audio_player = AudioPlayer::new(&stream_handle).unwrap();
 
@@ -37,6 +44,8 @@ fn setup(world: &mut World) {
     Osu::init_inventory_selections(world);
 
     world.spawn((instance, OsuInstance));
+
+    println!("Server is running on: \x1b[32mlocalhost:25565\x1b[0m")
 }
 
 fn init_clients(
