@@ -431,7 +431,8 @@ pub fn update_osu(
 
                         let center = DVec3::new(
                             screen_size.0 as f64 - next_hitobject.x() as f64 * osu.scale(),
-                            next_hitobject.y() as f64 * osu.scale() + margin_size.1 as f64,
+                            (screen_size.1 as f64 - next_hitobject.y() as f64 * osu.scale())
+                                + margin_size.1 as f64,
                             osu.screen_z + z_offset as f64,
                         );
 
