@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use directories::BaseDirs;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use std::{
     cmp::{min, Reverse},
@@ -36,6 +35,7 @@ const PAGE_SIZE: usize = 36;
 pub struct SongSelectionInventory {
     cur_page: usize,
     songs: Vec<PathBuf>,
+    songs_dir: PathBuf,
     keywords: Option<String>,
 }
 
@@ -45,17 +45,18 @@ struct Song {
 }
 
 impl SongSelectionInventory {
-    pub fn new() -> Result<(Self, Inventory)> {
+    pub fn new(songs_dir: PathBuf) -> Result<(Self, Inventory)> {
         let inventory = Inventory::new(InventoryKind::Generic9x6);
 
-        Ok((
-            Self {
-                cur_page: 0,
-                songs: Self::get_all_songs()?,
-                keywords: None,
-            },
-            inventory,
-        ))
+        let mut result = Self {
+            cur_page: 0,
+            songs_dir,
+            songs: Default::default(),
+            keywords: None,
+        };
+        result.songs = result.fetch_all_songs()?;
+
+        Ok((result, inventory))
     }
 
     pub fn go_to_next_page(&mut self) {
@@ -67,7 +68,7 @@ impl SongSelectionInventory {
     }
 
     pub fn set_filter(&mut self, keywords: Option<&str>) -> Result<()> {
-        self.songs = Self::filter_songs(Self::get_all_songs()?, keywords);
+        self.songs = Self::filter_songs(self.fetch_all_songs()?, keywords);
         self.keywords = keywords.map(|s| s.to_string());
         self.cur_page = 0;
 
@@ -107,8 +108,15 @@ impl SongSelectionInventory {
         (self.songs.len() - 1) / PAGE_SIZE
     }
 
-    fn get_all_songs() -> Result<Vec<PathBuf>> {
-        Ok(read_dir(Self::get_songs_dir()?)?
+    fn fetch_all_songs(&self) -> Result<Vec<PathBuf>> {
+        if !self.songs_dir.exists() {
+            return Err(anyhow!(
+                "Could not find osu! song directory: '{}'.",
+                self.songs_dir.display()
+            ));
+        }
+
+        Ok(read_dir(self.songs_dir.clone())?
             .filter_map(|result| result.ok())
             .map(|entry| entry.path())
             .filter(|entry| entry.is_dir() && entry.file_name().is_some())
@@ -138,20 +146,6 @@ impl SongSelectionInventory {
                     .collect()
             }
             None => songs,
-        }
-    }
-
-    fn get_songs_dir() -> Result<PathBuf> {
-        let base_dirs = BaseDirs::new().ok_or(anyhow!("No home directory found in the system"))?;
-        let beatmaps_dir = base_dirs.data_local_dir().join("osu!").join("Songs");
-
-        if beatmaps_dir.exists() {
-            Ok(beatmaps_dir)
-        } else {
-            Err(anyhow!(
-                "Could not find osu song directory: '{}'",
-                beatmaps_dir.display()
-            ))
         }
     }
 }

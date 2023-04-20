@@ -1,5 +1,9 @@
+use std::path::PathBuf;
+
+use colored::Colorize;
 use osucraft::audio::AudioPlayer;
 
+use osucraft::configs::Configs;
 use osucraft::osu::{Osu, OsuInstance};
 use osucraft::plugin::OsuPlugin;
 use rodio::OutputStream;
@@ -36,16 +40,31 @@ pub fn main() {
 }
 
 fn setup(world: &mut World) {
+    // Init configs
+    let configs = Configs::open();
+    let configs_path = Configs::path();
+    let header = format!(
+        "================= CONFIGS ({}) =================",
+        configs_path.display()
+    );
+    println!("{}", header.cyan());
+    println!("{configs}\n");
+    let info = format!(
+        "INFO: To update any config modify the file '{}' and restart the server.\n",
+        configs_path.display()
+    );
+    println!("{}", info.yellow());
+
     let server = world.resource::<Server>();
     let mut instance = server.new_instance(DimensionId::default());
 
     // Init osu
     world.resource::<Osu>().init(&mut instance);
-    Osu::init_inventory_selections(world);
+    Osu::init_inventory_selections(world, PathBuf::from(configs.songs_directory()));
 
     world.spawn((instance, OsuInstance));
 
-    println!("Server is running on: \x1b[32mlocalhost:25565\x1b[0m")
+    println!("Server is running on: {}", "localhost::25565".green())
 }
 
 fn init_clients(
