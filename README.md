@@ -4,6 +4,8 @@ An implementation of the rhythm game [osu!](https://osu.ppy.sh/home) inside of m
 
 ![gameplay](/assets/gameplay.gif)
 
+> 🎬 Showcase video: [here](https://www.youtube.com/watch?v=Yw5VYiOWDWk)
+
 Osucraft is a custom minecraft server implemented using the [valence](https://github.com/valence-rs/valence) framework, which I highly recommend cheking out if you're interested in building your own custom minecraft server using [rust](https://www.rust-lang.org/).
 
 Sugestions are more than welcomed, so feel free to open an issues or pull requests with possible improvements.
