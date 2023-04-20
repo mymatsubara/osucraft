@@ -1,6 +1,6 @@
 [package]
 name = "osucraft"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,11 +8,14 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.68"
 bevy_ecs = "0.9.1"
+colored = "2.0.0"
 directories = "5.0.0"
 fuzzy-matcher = "0.3.7"
 osu-file-parser = "1.1.0"
 rand = "0.8.5"
 rodio = "0.17.1"
+serde = "1.0.160"
+serde_json = "1.0.96"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 valence = { git = "https://github.com/mymatsubara/valence", branch = "osucraft" }

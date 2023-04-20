@@ -6,6 +6,7 @@ pub mod beatmap;
 pub mod beatmap_selection;
 pub mod color;
 pub mod commands;
+pub mod configs;
 pub mod digit;
 pub mod hit_object;
 pub mod hit_score;

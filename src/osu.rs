@@ -248,8 +248,8 @@ impl Osu {
         instance.set_block(block_pos, Block::new(BlockState::BEDROCK));
     }
 
-    pub fn init_inventory_selections(world: &mut World) {
-        match SongSelectionInventory::new() {
+    pub fn init_inventory_selections(world: &mut World, songs_dir: PathBuf) {
+        match SongSelectionInventory::new(songs_dir) {
             Ok(song_selection) => {
                 world.spawn(song_selection);
             }
