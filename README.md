@@ -1,6 +1,6 @@
 # osucraft
 
-An implementation of the rhythm game [osu!](https://osu.ppy.sh/home) inside of minecraft using [valence](https://github.com/valence-rs/valence).
+An implementation of the rhythm game [osu!](https://osu.ppy.sh/home) inside of minecraft (1.19.3) using [valence](https://github.com/valence-rs/valence).
 
 ![gameplay](/assets/gameplay.gif)
 
