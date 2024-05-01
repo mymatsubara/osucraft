@@ -16,7 +16,7 @@ Sugestions are more than welcomed, so feel free to open an issues or pull reques
 
 ### Windows
 
-Download the executable [here](https://github.com/mymatsubara/osucraft/releases/tag/0.1.0) and run it. Now you should be to access the server on the address `localhost`.
+Download the executable [here](https://github.com/mymatsubara/osucraft/releases/tag/0.1.0) and run it. Now you should be to access the server on the address `127.0.0.1:25565`.
 
 ### Linux and MacOS
 

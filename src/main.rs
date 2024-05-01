@@ -50,10 +50,14 @@ fn setup(world: &mut World) {
     println!("{}", header.cyan());
     println!("{configs}\n");
     let info = format!(
-        "INFO: To update any config modify the file '{}' and restart the server.\n",
+        "INFO: To update any config modify the file '{}' and restart the server.",
         configs_path.display()
     );
     println!("{}", info.yellow());
+    println!(
+        "{}",
+        "INFO: The server is running on minecraft version 1.19.3\n".yellow()
+    );
 
     let server = world.resource::<Server>();
     let mut instance = server.new_instance(DimensionId::default());
@@ -64,7 +68,7 @@ fn setup(world: &mut World) {
 
     world.spawn((instance, OsuInstance));
 
-    println!("Server is running on: {}", "localhost::25565".green())
+    println!("Server is running on: {}", "127.0.0.1:25565".green())
 }
 
 fn init_clients(
